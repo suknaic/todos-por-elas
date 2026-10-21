@@ -1,0 +1,17 @@
+{
+  "name": "dashboard-todas-por-elas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dashboard em tempo real do formulario KoboToolbox TodosPorElas",
+  "type": "module",
+  "scripts": {
+    "start": "PORT=4173 node server.js",
+    "dev": "PORT=4173 node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "localtunnel": "^2.0.2"
+  }
+}

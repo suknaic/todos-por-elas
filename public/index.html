@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TodosPorElas — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%97%3C/text%3E%3C/svg%3E" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">TP</div>
+      <div class="brand-text">
+        <h1 id="projectTitle">TodosPorElas</h1>
+        <p id="projectSubtitle">Cadastro de Usuários · Juntos Pelo Acre</p>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <div class="live" id="liveBadge" title="Status da conexão em tempo real">
+        <span class="live-dot"></span>
+        <span id="liveText">Conectando…</span>
+      </div>
+      <div class="updated">
+        <span class="updated-label">Atualizado</span>
+        <span id="lastUpdated">—</span>
+      </div>
+      <a class="btn" href="/api/export.csv" id="btnExport">Exportar CSV</a>
+      <button class="btn btn-primary" id="btnRefresh">Atualizar agora</button>
+    </div>
+  </header>
+
+  <div class="error-banner" id="errorBanner" hidden>
+    <span id="errorText"></span>
+    <button id="errorClose" aria-label="Fechar">×</button>
+  </div>
+
+  <main>
+    <section class="kpis" id="kpis">
+      <article class="kpi">
+        <span class="kpi-label">Cadastros totais</span>
+        <strong class="kpi-value" id="kpiTotal">0</strong>
+        <span class="kpi-sub" id="kpiTotalSub">aguardando respostas</span>
+      </article>
+      <article class="kpi">
+        <span class="kpi-label">Idade média</span>
+        <strong class="kpi-value" id="kpiIdade">—</strong>
+        <span class="kpi-sub" id="kpiIdadeSub">anos</span>
+      </article>
+      <article class="kpi">
+        <span class="kpi-label">Zona urbana</span>
+        <strong class="kpi-value" id="kpiUrbana">—</strong>
+        <span class="kpi-sub" id="kpiUrbanaSub">das residências informadas</span>
+      </article>
+      <article class="kpi">
+        <span class="kpi-label">Acompanhamento</span>
+        <strong class="kpi-value" id="kpiAcomp">—</strong>
+        <span class="kpi-sub" id="kpiAcompSub">CRASS / CREAS</span>
+      </article>
+      <article class="kpi">
+        <span class="kpi-label">Dependentes declarados</span>
+        <strong class="kpi-value" id="kpiFilhos">—</strong>
+        <span class="kpi-sub" id="kpiFilhosSub">filhos informados</span>
+      </article>
+      <article class="kpi">
+        <span class="kpi-label">Serviços do programa</span>
+        <strong class="kpi-value" id="kpiServicos">—</strong>
+        <span class="kpi-sub" id="kpiServicosSub">itens distintos acessados</span>
+      </article>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">I. Identificação</h2>
+      <div class="grid">
+        <article class="card card-wide">
+          <h3>Cadastros por cidade de residência</h3>
+          <div class="chart-box tall"><canvas id="chartCidade"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Identidade de gênero</h3>
+          <div class="chart-box"><canvas id="chartGenero"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Zona de residência</h3>
+          <div class="chart-box"><canvas id="chartZona"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Raça / Cor / Etnia</h3>
+          <div class="chart-box"><canvas id="chartRaca"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Orientação sexual</h3>
+          <div class="chart-box"><canvas id="chartOrientacao"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Faixa etária</h3>
+          <div class="chart-box"><canvas id="chartIdade"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Renda familiar per capita</h3>
+          <div class="chart-box"><canvas id="chartRenda"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Situação de trabalho</h3>
+          <div class="chart-box"><canvas id="chartTrabalha"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Nacionalidade</h3>
+          <div class="chart-box"><canvas id="chartNacionalidade"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Possui filhos</h3>
+          <div class="chart-box"><canvas id="chartFilhos"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Recebe auxílio financeiro</h3>
+          <div class="chart-box"><canvas id="chartAuxilio"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Deficiência no grupo familiar</h3>
+          <div class="chart-box"><canvas id="chartDeficiencia"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Perfil migrante</h3>
+          <div class="chart-box"><canvas id="chartMigrante"></canvas></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">II. Dados educacionais</h2>
+      <div class="grid">
+        <article class="card">
+          <h3>Nível de escolaridade</h3>
+          <div class="chart-box"><canvas id="chartNivel"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Turno de estudo</h3>
+          <div class="chart-box"><canvas id="chartTurno"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Curso superior</h3>
+          <div class="chart-box"><canvas id="chartSuperior"></canvas></div>
+        </article>
+        <article class="card">
+          <h3>Ano de ingresso</h3>
+          <div class="chart-box"><canvas id="chartIngresso"></canvas></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">III. Vulnerabilidade e serviços</h2>
+      <div class="grid">
+        <article class="card">
+          <h3>É acompanhado pelo</h3>
+          <div class="chart-box"><canvas id="chartAcompanhado"></canvas></div>
+        </article>
+        <article class="card card-wide">
+          <h3>Serviços acessados — Programa Juntos Pelo Acre</h3>
+          <div class="chart-box tall"><canvas id="chartServicos"></canvas></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="table-head">
+        <h2 class="section-title">Cadastros recentes</h2>
+        <div class="table-tools">
+          <input type="search" id="searchInput" placeholder="Buscar nome, cidade, telefone…" />
+          <label class="toggle">
+            <input type="checkbox" id="revealSensitive" />
+            <span>Revelar RG / CPF</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="empty" id="emptyState">
+        <div class="empty-icon">⏳</div>
+        <h3>Nenhum cadastro recebido ainda</h3>
+        <p>Este dashboard atualiza automaticamente assim que uma resposta for enviada pelo coletor de campo.</p>
+        <div class="form-links" id="formLinks"></div>
+      </div>
+
+      <div class="card table-card" id="tableCard" hidden>
+        <div class="table-scroll">
+          <table id="dataTable">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span id="tableCount"></span>
+          <div class="pager">
+            <button class="btn btn-sm" id="prevPage">Anterior</button>
+            <span id="pageInfo"></span>
+            <button class="btn btn-sm" id="nextPage">Próxima</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span id="footerInfo">Dados via KoboToolbox API</span>
+      <a id="footerForm" href="#" target="_blank" rel="noopener">Abrir formulário ↗</a>
+    </footer>
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
