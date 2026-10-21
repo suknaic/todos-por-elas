@@ -800,7 +800,7 @@ tbody tr:hover {
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 60;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -926,14 +926,6 @@ tbody tr:hover {
   line-height: 1.25;
 }
 
-.updated-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: .1em;
-  color: var(--text-dim);
-  font-weight: 600;
-}
-
 #lastUpdated {
   font-size: 13px;
   font-weight: 700;
@@ -1048,7 +1040,7 @@ tbody tr:hover {
   border: 1px solid var(--border);
   border-top: 4px solid var(--brand);
   border-radius: var(--radius-lg);
-  padding: 28px;
+  padding: 20px;
   box-shadow: var(--shadow-sm);
   margin-bottom: 26px;
 }

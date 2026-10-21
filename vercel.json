@@ -3,5 +3,13 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": null,
-  "regions": ["gru1"]
+  "regions": ["gru1"],
+  "routes": [
+    { "src": "/api/.*", "dest": "/api/index.js" },
+    { "src": "/vendor/(.*)", "dest": "/public/vendor/$1" },
+    { "src": "/assets/(.*)", "dest": "/public/assets/$1" },
+    { "src": "/geo/(.*)", "dest": "/public/geo/$1" },
+    { "src": "/styles.css", "dest": "/public/styles.css" },
+    { "src": "/(.*)", "dest": "/public/index.html" }
+  ]
 }
