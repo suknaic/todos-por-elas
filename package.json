@@ -12,6 +12,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
     "localtunnel": "^2.0.2"
   }
 }

@@ -3,18 +3,16 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  CONFIG,
+  fetchSchema as koboFetchSchema,
+  fetchIncremental,
+  loadGeoJSON
+} from './lib/kobo.js';
+import { computeAggregates } from './lib/aggregate.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
-
-const CONFIG = {
-  assetUid: process.env.KOBO_ASSET_UID || 'a8eeErM848tiUcqJXeES3d',
-
-  exportSettingsUid: process.env.KOBO_EXPORT_UID || 'aiJnVoQnGvKBSATXBugyNZ',
-  apiBase: process.env.KOBO_API_BASE || 'https://kf.kobotoolbox.org/api/v2',
-  pollIntervalMs: Number(process.env.POLL_INTERVAL_MS || 15000),
-  port: Number(process.env.PORT || 3000),
-  pageSize: 1000
-};
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -24,15 +22,48 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
-  '.csv': 'text/csv; charset=utf-8'
+  '.csv': 'text/csv; charset=utf-8',
+  '.geojson': 'application/geo+json'
 };
 
+const BASIC_USER = process.env.DASHBOARD_USER || '';
+const BASIC_PASS = process.env.DASHBOARD_PASS || '';
+const requireAuth = !!(BASIC_USER && BASIC_PASS);
+
+function basicAuth(req) {
+  if (!requireAuth) return true;
+  const auth = req.headers.authorization || '';
+  const match = auth.match(/^Basic\s+(.+)$/);
+  if (!match) return false;
+  try {
+    const decoded = Buffer.from(match[1], 'base64').toString('utf-8');
+    const [user, pass] = decoded.split(':');
+    return user === BASIC_USER && pass === BASIC_PASS;
+  } catch {
+    return false;
+  }
+}
+
+function authChallenge(res) {
+  res.writeHead(401, {
+    'WWW-Authenticate': 'Basic realm="Dashboard"',
+    'Content-Type': 'text/plain'
+  });
+  res.end('Não autorizado');
+}
+
 const state = {
-  data: null,
-  meta: { count: 0, lastUpdated: null, error: null, submissionCount: null },
   schema: null,
-  schemaError: null,
+  fields: [],
+  choices: {},
   signature: null,
+  data: [],
+  storeMaxId: null,
+  version: 0,
+  count: 0,
+  lastUpdated: null,
+  error: null,
+  geoJSON: null,
   clients: new Set()
 };
 
@@ -43,61 +74,6 @@ async function koboGet(url) {
   });
   if (!res.ok) throw new Error(`Kobo API ${res.status} em ${url}`);
   return res.json();
-}
-
-async function fetchSchema() {
-  try {
-    const asset = await koboGet(`${CONFIG.apiBase}/assets/${CONFIG.assetUid}/`);
-    const content = asset.content || {};
-    const survey = (content.survey || []).filter((q) => {
-      const t = q.type || '';
-      return !['start', 'end', 'note', 'begin_group', 'end_group', 'begin_repeat', 'end_repeat'].includes(t);
-    });
-    const choices = {};
-    for (const c of content.choices || []) {
-      const list = c.list_name;
-      if (!choices[list]) choices[list] = [];
-      choices[list].push({
-        name: c.name,
-        label: ((c.label || [])[0] || c.name).trim(),
-        value: c.$autovalue || c.name
-      });
-    }
-    state.schema = {
-      title: asset.name || 'Cadastro de Usuários',
-      description: (asset.settings || {}).description || '',
-      languages: (asset.summary || {}).languages || [],
-      updated: asset.date_modified,
-      deployed: asset.date_deployed,
-      formUrl: (asset.deployment__links || {}).single_url || null,
-      fields: survey.map((q) => ({
-        name: q.name || q.$xpath || q.$autoname,
-        xpath: q.$xpath || q.$autoname || q.name,
-        type: q.type,
-        label: ((q.label || [])[0] || q.name || '').trim(),
-        list: q.select_from_list_name || null,
-        relevant: q.relevant || null,
-        required: !!q.required
-      })),
-      choices
-    };
-    state.schemaError = null;
-  } catch (err) {
-    state.schemaError = err.message;
-  }
-}
-
-async function fetchData() {
-  const results = [];
-  let url = `${CONFIG.apiBase}/assets/${CONFIG.assetUid}/data/?limit=${CONFIG.pageSize}`;
-  let count = 0;
-  while (url) {
-    const page = await koboGet(url);
-    count = page.count ?? count;
-    results.push(...(page.results || []));
-    url = page.next;
-  }
-  return { results, count };
 }
 
 function makeSignature(rows) {
@@ -123,24 +99,26 @@ function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function makeDemoRow(i) {
-  const first = ['Ana', 'Maria', 'Juliana', 'Beatriz', 'Camila', 'Fernanda', 'Larissa', 'Aline', 'Rafaela', 'Sandra', 'Josefa', 'Mariana', 'Patrícia', 'Tainá', 'Vanessa', 'Cristiane', 'Adriana', 'Simone'];
-  const last = ['Silva', 'Santos', 'Oliveira', 'Souza', 'Lima', 'Pereira', 'Costa', 'Almeida', 'Ribeiro', 'Ferreira', 'Carvalho', 'Gomes', 'Martins'];
-  const pickList = (listName) => {
-    const items = state.schema?.choices?.[listName] || [];
-    if (!items.length) return '';
-    const item = pick(items);
-    return item.value ?? item.name;
-  };
-  const simNao = (p = 0.5) => (Math.random() < p ? 'sim' : 'n_o');
+const firstNames = ['Ana', 'Maria', 'Juliana', 'Beatriz', 'Camila', 'Fernanda', 'Larissa', 'Aline', 'Rafaela', 'Sandra', 'Josefa', 'Mariana', 'Patrícia', 'Tainá', 'Vanessa', 'Cristiane', 'Adriana', 'Simone'];
+const lastNames = ['Silva', 'Santos', 'Oliveira', 'Souza', 'Lima', 'Pereira', 'Costa', 'Almeida', 'Ribeiro', 'Ferreira', 'Carvalho', 'Gomes', 'Martins'];
 
+function pickList(listName) {
+  const items = state.choices[listName] || [];
+  if (!items.length) return '';
+  const item = pick(items);
+  return item.value ?? item.name;
+}
+
+const simNao = (p = 0.5) => (Math.random() < p ? 'sim' : 'n_o');
+
+function makeDemoRow(i) {
   const estrangeiro = Math.random() < 0.12;
   const trabalha = simNao();
   const possuiFilhos = simNao(0.65);
   const recebeAuxilio = simNao(0.6);
   const deficiencia = simNao(0.25);
   const migrante = simNao(0.3);
-  const servicos = (state.schema?.choices?.zx7ud82 || [])
+  const servicos = (state.choices.zx7ud82 || [])
     .filter(() => Math.random() < 0.4)
     .map((c) => c.value ?? c.name);
   const idade = 16 + Math.floor(Math.random() * 45);
@@ -149,23 +127,23 @@ function makeDemoRow(i) {
     _id: `demo-${i}-${Date.now()}`,
     _uuid: `demo-uuid-${i}-${Date.now()}`,
     _submission_time: new Date(Date.now() - Math.floor(Math.random() * 25) * 86400000).toISOString(),
-    Nome_do_usu_rio: `${pick(first)} ${pick(last)}`,
+    Nome_do_usu_rio: `${pick(firstNames)} ${pick(lastNames)}`,
     RG: String(100000000 + Math.floor(Math.random() * 899999999)),
     CPF: String(10000000000 + Math.floor(Math.random() * 89999999999)),
     Idade: String(idade),
     Nacionalidade: estrangeiro ? 'estrangeiro' : 'brasileiro',
     Se_for_estrangeiro_qual_a_nacionalidade: estrangeiro ? 'Bolívia' : '',
     Telefone: `(68) 9${Math.floor(1000 + Math.random() * 8999)}-${Math.floor(1000 + Math.random() * 8999)}`,
-    Cidade_de_Nascimento: pick(['Rio Branco', 'Cruzeiro do Sul', 'Tarauacá', 'Sena Madureira', 'Brasília']),
+    Cidade_de_Nascimento: pick(['Rio Branco', 'Cruzeiro do Sul', 'Tarauacá', 'Brasília']),
     Cidade_da_resid_ncia_atual: pickList('wb2gy08'),
     Estado_de_Nasimento: pickList('wi2ra14'),
-    Endere_o: `Rua ${pick(last)}, ${Math.floor(1 + Math.random() * 999)}`,
+    Endere_o: `Rua ${pick(lastNames)}, ${Math.floor(1 + Math.random() * 999)}`,
     Zona: pickList('ml1hg11'),
     Possui_Filhos: possuiFilhos,
     Se_sim_quantos: possuiFilhos === 'sim' ? String(1 + Math.floor(Math.random() * 4)) : '',
     Identidade_de_G_nero: pickList('xv1wh54'),
     Orienta_o_Sexual: pickList('ma9np89'),
-    Quem_o_respons_vel_to_do_grupo_familiar: pick(first),
+    Quem_o_respons_vel_to_do_grupo_familiar: pick(firstNames),
     Trabalha: trabalha,
     Se_sim_qual_o_v_nculo: trabalha === 'sim' ? pickList('ge5pp48') : '',
     Renda_Familiar_per_capita: pickList('bi8dg53'),
@@ -195,6 +173,17 @@ function seedDemoDataAppend() {
   const row = makeDemoRow(demoSeq++);
   row._submission_time = new Date().toISOString();
   state.data.unshift(row);
+  if (state.data.length > 5000) state.data.length = 5000;
+  state.signature = makeSignature(state.data);
+  state.version++;
+  state.count = state.data.length;
+  state.lastUpdated = new Date().toISOString();
+  broadcast('stats', {
+    count: state.data.length,
+    added: 1,
+    lastUpdated: state.lastUpdated,
+    version: state.version
+  });
 }
 
 function seedDemoData(n = 48) {
@@ -204,57 +193,51 @@ function seedDemoData(n = 48) {
   demoSeq = n;
   state.data = rows;
   state.signature = makeSignature(rows);
-  state.meta = { count: rows.length, lastUpdated: new Date().toISOString(), error: null, submissionCount: rows.length };
+  state.version++;
+  state.count = rows.length;
+  state.lastUpdated = new Date().toISOString();
+  broadcast('stats', { count: rows.length, added: rows.length, lastUpdated: state.lastUpdated, version: state.version });
+}
+
+async function syncFromKobo() {
+  const demo = process.env.DEMO === '1' || process.env.DEMO === 'true';
+  if (demo) {
+    state.signature = makeSignature(state.data);
+    state.count = state.data.length;
+    state.lastUpdated = new Date().toISOString();
+    return { changed: false, count: state.data.length };
+  }
+  const { results, count, lastId, changed } = await fetchIncremental(state.storeMaxId);
+  if (!changed || !results.length) {
+    state.count = count || state.data.length;
+    state.lastUpdated = new Date().toISOString();
+    return { changed: false, count: state.count };
+  }
+  state.data = results.concat(state.data).slice(0, 5000);
+  state.storeMaxId = lastId;
+  state.signature = makeSignature(state.data);
+  state.version++;
+  state.count = count;
+  state.lastUpdated = new Date().toISOString();
+  broadcast('stats', {
+    count,
+    added: results.length,
+    lastUpdated: state.lastUpdated,
+    version: state.version
+  });
+  return { changed: true, count, added: results.length };
 }
 
 async function pollOnce({ silent = false } = {}) {
-  if (state.data) {
-    if (process.env.DEMO === '1' || process.env.DEMO === 'true') {
-      if (Math.random() < 0.7) {
-        const before = state.data.length;
-        seedDemoDataAppend();
-        state.signature = makeSignature(state.data);
-        state.meta = { count: state.data.length, lastUpdated: new Date().toISOString(), error: null, submissionCount: state.data.length };
-        broadcast('data', { count: state.data.length, previousCount: before, added: state.data.length - before, lastUpdated: state.meta.lastUpdated, results: state.data });
-        return { changed: true, count: state.data.length };
-      }
-    }
-    const changed = makeSignature(state.data) !== state.signature;
-    state.signature = makeSignature(state.data);
-    state.meta = { count: state.data.length, lastUpdated: new Date().toISOString(), error: null, submissionCount: state.data.length };
-    if (changed && !silent) broadcast('data', { count: state.data.length, previousCount: 0, added: state.data.length, lastUpdated: state.meta.lastUpdated, results: state.data });
-    return { changed, count: state.data.length };
-  }
   try {
-    const { results, count } = await fetchData();
-    const signature = makeSignature(results);
-    const changed = signature !== state.signature;
-    const previousCount = state.meta.count;
-
-    state.data = results;
-    state.signature = signature;
-    state.meta = {
-      count,
-      lastUpdated: new Date().toISOString(),
-      error: null,
-      submissionCount: count
-    };
-
-    if (changed && !silent) {
-      broadcast('data', {
-        count,
-        previousCount,
-        added: Math.max(0, results.length - previousCount),
-        lastUpdated: state.meta.lastUpdated,
-        results
-      });
-    }
-    return { changed, count };
+    const r = await syncFromKobo();
+    if (r.changed && !silent) broadcast('data', { count: r.count, added: r.added, lastUpdated: state.lastUpdated });
+    return r;
   } catch (err) {
-    state.meta.error = err.message;
-    state.meta.lastUpdated = new Date().toISOString();
-    if (!silent) broadcast('error', { message: err.message, lastUpdated: state.meta.lastUpdated });
-    return { changed: false, count: state.meta.count, error: err.message };
+    state.error = err.message;
+    state.lastUpdated = new Date().toISOString();
+    if (!silent) broadcast('error', { message: err.message, lastUpdated: state.lastUpdated });
+    return { changed: false, count: state.count, error: err.message };
   }
 }
 
@@ -291,12 +274,8 @@ function handleStream(req, res) {
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no'
   });
-  res.write(`event: hello\ndata: ${JSON.stringify({ count: state.meta.count, lastUpdated: state.meta.lastUpdated })}\n\n`);
-  res.write(`event: data\ndata: ${JSON.stringify({
-    count: state.meta.count,
-    lastUpdated: state.meta.lastUpdated,
-    results: state.data
-  })}\n\n`);
+  res.write(`event: hello\ndata: ${JSON.stringify({ count: state.count, lastUpdated: state.lastUpdated, version: state.version })}\n\n`);
+  res.write(`event: stats\ndata: ${JSON.stringify({ count: state.count, lastUpdated: state.lastUpdated, version: state.version, demo: process.env.DEMO === '1' })}\n\n`);
 
   state.clients.add(res);
   const ping = setInterval(() => {
@@ -313,21 +292,22 @@ function handleStream(req, res) {
   });
 }
 
+function escapeCsv(v) {
+  const s = v == null ? '' : String(v);
+  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
 function handleCsv(res) {
-  const fields = state.schema?.fields || [];
+  const fields = state.fields || [];
   const header = ['submission_time', ...fields.map((f) => f.xpath)];
-  const escape = (v) => {
-    const s = v == null ? '' : String(v);
-    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const lines = [header.map(escape).join(',')];
+  const lines = [header.map(escapeCsv).join(',')];
   for (const row of state.data) {
     lines.push([
       row._submission_time || '',
       ...fields.map((f) => row[f.xpath] ?? row[f.name] ?? '')
-    ].map(escape).join(','));
+    ].map(escapeCsv).join(','));
   }
-  const payload = '﻿' + lines.join('\n');
+  const payload = '\uFEFF' + lines.join('\n');
   res.writeHead(200, {
     'Content-Type': 'text/csv; charset=utf-8',
     'Content-Disposition': `attachment; filename="todas-por-elas-${new Date().toISOString().slice(0, 10)}.csv"`,
@@ -336,7 +316,104 @@ function handleCsv(res) {
   res.end(payload);
 }
 
+function handleCsvResumo(res) {
+  const agg = computeAggregates(state.data, { fields: state.fields, choices: state.choices }, state.geoJSON, {});
+  const linhas = agg.cobertura.map((c) => `${c.codigoIbge},${escapeCsv(c.nome)},${c.n},${c.pct},${c.mediaIdade},${c.urbana},${c.comServico},${c.acompanhado}`);
+  const header = 'codigo_ibge,municipio,cadastros,pct_total,idade_media,urbana,com_servico,acompanhado';
+  const payload = '\uFEFF' + header + '\n' + linhas.join('\n');
+  res.writeHead(200, {
+    'Content-Type': 'text/csv; charset=utf-8',
+    'Content-Disposition': `attachment; filename="resumo-municipios-${new Date().toISOString().slice(0, 10)}.csv"`,
+    'Content-Length': Buffer.byteLength(payload)
+  });
+  res.end(payload);
+}
+
+function handleAggregate(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const city = url.searchParams.get('city') || undefined;
+  const days = url.searchParams.get('days') || undefined;
+  const agg = computeAggregates(state.data, { fields: state.fields, choices: state.choices }, state.geoJSON, { city, days });
+  json(res, 200, {
+    ...agg,
+    version: state.version,
+    lastUpdated: state.lastUpdated,
+    demo: process.env.DEMO === '1'
+  });
+}
+
+function handleSubmissions(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const page = Math.max(1, Number(url.searchParams.get('page') || 1));
+  const size = Math.min(100, Math.max(1, Number(url.searchParams.get('size') || 15)));
+  const city = url.searchParams.get('city') || undefined;
+  const q = url.searchParams.get('q') || undefined;
+  const days = url.searchParams.get('days') || undefined;
+  const sortKey = url.searchParams.get('sort') || 'submitted_at';
+  const sortDir = url.searchParams.get('dir') || 'desc';
+
+  let rows = state.data.slice();
+  if (city) {
+    const fCidade = state.fields.find((f) => f.list === 'wb2gy08' || f.name === 'Cidade_da_resid_ncia_atual');
+    rows = rows.filter((r) => {
+      const v = r[fCidade.xpath] ?? r[fCidade.name] ?? '';
+      return String(v) === city;
+    });
+  }
+  if (q) {
+    const nq = q.toLowerCase();
+    rows = rows.filter((r) => {
+      const hay = JSON.stringify(r).toLowerCase();
+      return hay.includes(nq);
+    });
+  }
+  if (days) {
+    const since = new Date(Date.now() - days * 86400000);
+    rows = rows.filter((r) => new Date(r.submitted_at || r._submission_time || r.start) >= since);
+  }
+  const total = rows.length;
+  rows.sort((a, b) => {
+    const av = a[sortKey] || a._submission_time || '';
+    const bv = b[sortKey] || b._submission_time || '';
+    let cmp = 0;
+    if (av < bv) cmp = -1;
+    else if (av > bv) cmp = 1;
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+  const start = (page - 1) * size;
+  const slice = rows.slice(start, start + size);
+  const pages = Math.max(1, Math.ceil(total / size));
+  json(res, 200, {
+    rows: slice.map((r) => ({
+      ...r,
+      __cpf: r.CPF ? '***' : null,
+      __rg: r.RG ? '***' : null,
+      __envio: r._submission_time || r.received_at || ''
+    })),
+    total,
+    page,
+    pages,
+    size
+  });
+}
+
+function handleMeta(req, res) {
+  json(res, 200, {
+    ok: true,
+    count: state.count,
+    lastUpdated: state.lastUpdated,
+    version: state.version,
+    demo: process.env.DEMO === '1',
+    clients: state.clients.size,
+    error: state.error,
+    pollIntervalMs: CONFIG.pollIntervalMs,
+    fields: state.fields.length
+  });
+}
+
 const server = http.createServer(async (req, res) => {
+  if (requireAuth && !basicAuth(req)) return authChallenge(res);
+
   const url = new URL(req.url, `http://${req.headers.host}`);
   const { pathname } = url;
 
@@ -346,9 +423,9 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/data') {
     return json(res, 200, {
-      count: state.meta.count,
-      lastUpdated: state.meta.lastUpdated,
-      error: state.meta.error,
+      count: state.count,
+      lastUpdated: state.lastUpdated,
+      error: state.error,
       pollIntervalMs: CONFIG.pollIntervalMs,
       results: state.data
     });
@@ -357,8 +434,8 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/schema') {
     return json(res, 200, {
       schema: state.schema,
-      error: state.schemaError,
-      exportSettingsUid: CONFIG.exportSettingsUid
+      error: null,
+      fields: state.fields.length
     });
   }
 
@@ -366,32 +443,73 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/refresh') {
     const r = await pollOnce();
-    return json(res, 200, { ok: true, ...r, count: state.meta.count, lastUpdated: state.meta.lastUpdated });
+    return json(res, 200, { ok: true, ...r, count: state.count, lastUpdated: state.lastUpdated, version: state.version });
   }
+
+  if (pathname === '/api/aggregate') return handleAggregate(req, res);
+
+  if (pathname === '/api/submissions') return handleSubmissions(req, res);
+
+  if (pathname === '/api/meta') return handleMeta(req, res);
 
   if (pathname === '/api/export.csv') return handleCsv(res);
 
+  if (pathname === '/api/export.resumo.csv') return handleCsvResumo(res);
+
+  if (pathname === '/geo/acre-municipios.geojson') {
+    try {
+      const data = await fs.readFile(path.join(PUBLIC_DIR, 'geo', 'acre-municipios.geojson'));
+      res.writeHead(200, { 'Content-Type': 'application/geo+json', 'Cache-Control': 'public, max-age=86400' });
+      res.end(data);
+    } catch {
+      json(res, 404, { error: 'GeoJSON não encontrado' });
+    }
+    return;
+  }
+
   if (pathname === '/health') {
-    return json(res, 200, { ok: true, clients: state.clients.size, count: state.meta.count });
+    return json(res, 200, { ok: true, clients: state.clients.size, count: state.count });
   }
 
   return serveStatic(req, res, pathname);
 });
 
-await fetchSchema();
+async function init() {
+  try {
+    const schema = await koboFetchSchema();
+    state.schema = schema;
+    state.fields = schema.fields || [];
+    state.choices = schema.choices || {};
+    if (schema.title) {
+      console.log(`[schema] ${schema.title} · ${state.fields.length} campos`);
+    }
+  } catch (err) {
+    console.error('[schema] falha:', err.message);
+  }
+  try {
+    state.geoJSON = await loadGeoJSON();
+  } catch (err) {
+    console.warn('[geo] falha ao carregar acre-municipios.geojson:', err.message);
+  }
 
-const demoEnv = process.env.DEMO === '1' || process.env.DEMO === 'true';
-if (demoEnv) {
-  seedDemoData(Number(process.env.DEMO_ROWS || 48));
-  console.log(`[demo] ${state.meta.count} registros de demonstração injetados`);
-} else {
-  await pollOnce({ silent: true });
+  const demoEnv = process.env.DEMO === '1' || process.env.DEMO === 'true';
+  if (demoEnv) {
+    seedDemoData(Number(process.env.DEMO_ROWS || 48));
+    console.log(`[demo] ${state.count} registros de demonstração injetados`);
+  } else {
+    await pollOnce({ silent: true });
+  }
+
+  setInterval(() => pollOnce(), CONFIG.pollIntervalMs);
+  setInterval(() => koboFetchSchema().catch(() => {}), 5 * 60 * 1000);
+
+  server.listen(CONFIG.port, () => {
+    console.log(`Dashboard em http://localhost:${CONFIG.port}`);
+    console.log(`Projeto: ${CONFIG.assetUid} | Poll: ${CONFIG.pollIntervalMs / 1000}s | Registros: ${state.count}`);
+    if (requireAuth) console.log('[auth] Basic auth ativo');
+  });
 }
 
-setInterval(() => pollOnce(), CONFIG.pollIntervalMs);
-setInterval(() => fetchSchema(), 5 * 60 * 1000);
+process.on('SIGTERM', () => server.close());
 
-server.listen(CONFIG.port, () => {
-  console.log(`Dashboard TodosPorElas em http://localhost:${CONFIG.port}`);
-  console.log(`Projeto: ${CONFIG.assetUid} | Poll: ${CONFIG.pollIntervalMs / 1000}s | Registros: ${state.meta.count}`);
-});
+init();

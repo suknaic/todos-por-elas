@@ -1,29 +1,33 @@
+const API_AGGREGATE = '/api/aggregate';
+const API_SUBMISSIONS = '/api/submissions';
 const API_SCHEMA = '/api/schema';
-const API_DATA = '/api/data';
 const API_STREAM = '/api/stream';
 const PAGE_SIZE = 15;
 
 const PALETTE = [
-  '#7c3aed', '#db2777', '#0ea5e9', '#059669', '#f59e0b',
-  '#ef4444', '#8b5cf6', '#14b8a6', '#6366f1', '#ec4899',
-  '#22c55e', '#eab308', '#06b6d4', '#f97316', '#a855f7',
-  '#84cc16', '#0891b2', '#d946ef', '#facc15', '#64748b', '#1e293b'
+  '#5a34a0', '#b02a5b', '#1f6f57', '#8a5a1d',
+  '#0f6fb0', '#c2410c', '#0891b2', '#7c3aed'
 ];
+const SCALE = ['#ede7f6', '#c3b0e2', '#8560c0', '#4b2a8a'];
+const SCALE_DARK = ['#3a2d5c', '#4a3d70', '#8560c0', '#c3b0e2'];
 
 const $ = (id) => document.getElementById(id);
 
 const app = {
   schema: null,
   fields: [],
-  fieldsByXpath: new Map(),
+  choices: {},
   records: [],
   charts: new Map(),
+  map: null,
+  mapLayers: new Map(),
   page: 1,
-  sort: { key: 'envio', dir: 'desc' },
+  sort: { key: 'submitted_at', dir: 'desc' },
   search: '',
   reveal: false,
-  freshIds: new Set(),
-  lastCount: 0
+  cidadeFiltro: null,
+  periodoFiltro: 'todos',
+  lastVersion: -1
 };
 
 function normKey(s) {
@@ -51,7 +55,7 @@ function fmtTime(v) {
 function animNum(el, to, decimals = 0) {
   if (!el) return;
   const from = Number(el.dataset.v || 0);
-  if (from === to) { el.textContent = decimals ? to.toFixed(decimals) : String(to); el.dataset.v = to; return; }
+  if (from === to) { el.textContent = decimals ? to.toFixed(decimals) : String(to).toLocaleString('pt-BR'); el.dataset.v = to; return; }
   const t0 = performance.now();
   const dur = 620;
   const step = (t) => {
@@ -71,15 +75,15 @@ function setKpi(id, value, decimals = 0) {
 
 function choiceLabel(listName, value) {
   if (value == null || value === '') return '';
-  if (!listName || !app.schema?.choices?.[listName]) return String(value).trim();
-  const items = app.schema.choices[listName];
+  if (!listName || !app.choices?.[listName]) return String(value).trim();
+  const items = app.choices[listName];
   const wanted = normKey(value);
   const hit = items.find((c) => normKey(c.name) === wanted || normKey(c.value) === wanted || normKey(c.label) === wanted);
   return hit ? hit.label : String(value).trim();
 }
 
 function getValue(rec, field) {
-  const v = rec[field.xpath] ?? rec[field.name] ?? rec[normKey(field.xpath)];
+  const v = rec[field.xpath] ?? rec[field.name] ?? rec[normKey(field.xpath)] ?? rec[normKey(field.name)];
   if (v == null) return '';
   if (field.type === 'select_multiple') {
     const arr = Array.isArray(v) ? v : String(v).split(/[;, ]+/).filter(Boolean);
@@ -98,25 +102,15 @@ function field(labelPart) {
   return app.fields.find((f) => normKey(f.label).includes(wanted) || normKey(f.xpath).includes(wanted));
 }
 
-function countsOf(f, { multi = false } = {}) {
-  const map = new Map();
-  if (!f) return map;
-  for (const rec of app.records) {
-    const v = getValue(rec, f);
-    const items = multi ? (Array.isArray(v) ? v : [v]) : [v];
-    for (const raw of items) {
-      const label = Array.isArray(raw) ? raw : raw;
-      if (!label) continue;
-      const key = String(label).trim();
-      if (!key) continue;
-      map.set(key, (map.get(key) || 0) + 1);
-    }
-  }
-  return map;
-}
+const mget = (m, k) => (m instanceof Map ? m.get(k) : (m && m[k])) || 0;
 
 function sortedEntries(map) {
-  return [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const entries = map instanceof Map ? [...map.entries()] : Object.entries(map || {});
+  return entries.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#000';
 }
 
 function destroyChart(id) {
@@ -132,23 +126,32 @@ function mountChart(id, config) {
   app.charts.set(id, new Chart(canvas.getContext('2d'), config));
 }
 
-const commonOpts = () => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  animation: { duration: 650, easing: 'easeOutQuart' },
-  plugins: {
-    legend: {
-      labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 14, font: { size: 11.5, family: 'Inter', weight: '500' }, color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() }
-    },
-    tooltip: {
-      backgroundColor: '#1c1730',
-      padding: 10,
-      cornerRadius: 9,
-      titleFont: { family: 'Inter', size: 12 },
-      bodyFont: { family: 'Inter', size: 12 }
+const commonOpts = () => {
+  const border = cssVar('--border');
+  const textSoft = cssVar('--text-soft');
+  const grid = cssVar('--chart-grid');
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 650, easing: 'easeOutQuart' },
+    plugins: {
+      legend: {
+        labels: {
+          usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 12, boxHeight: 12,
+          borderWidth: 1, borderColor: 'rgba(29,38,48,.15)', useBorderRadius: true,
+          padding: 14, font: { size: 11.5, family: 'Inter', weight: '500' }, color: textSoft
+        },
+        tooltip: {
+          backgroundColor: '#fff', borderColor: border, borderWidth: 1, cornerRadius: 8,
+          titleFont: { family: 'Inter', size: 12, weight: '600' },
+          bodyFont: { family: 'Inter', size: 12 },
+          titleColor: cssVar('--text'), bodyColor: textSoft,
+          padding: 10, boxPadding: 4, displayColors: true
+        }
+      }
     }
-  }
-});
+  };
+};
 
 const barOpts = (horizontal = false) => ({
   ...commonOpts(),
@@ -156,22 +159,22 @@ const barOpts = (horizontal = false) => ({
   plugins: { ...commonOpts().plugins, legend: { display: false } },
   scales: {
     x: {
-      grid: { display: horizontal, color: 'rgba(140,130,170,.14)' },
-      ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim(), font: { size: 11, family: 'Inter' }, maxRotation: horizontal ? 0 : 45, autoSkip: true },
+      grid: { display: horizontal, color: cssVar('--chart-grid') },
+      ticks: { color: cssVar('--text-soft'), font: { size: 11, family: 'Inter' }, maxRotation: horizontal ? 0 : 45, autoSkip: true },
       border: { display: false }
     },
     y: {
-      grid: { display: !horizontal, color: 'rgba(140,130,170,.14)' },
-      ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim(), font: { size: 11, family: 'Inter' }, precision: 0, autoSkip: horizontal },
-      border: { display: false },
-      beginAtZero: true
+      grid: { display: !horizontal, color: cssVar('--chart-grid') },
+      ticks: { color: cssVar('--text-soft'), font: { size: 11, family: 'Inter' }, precision: 0, autoSkip: horizontal },
+      border: { display: false }, beginAtZero: true
     }
   }
 });
 
-function barChart(id, map, { horizontal = false, max = 12 } = {}) {
-  const entries = horizontal ? sortedEntries(map) : [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  const data = entries.slice(0, max);
+function barChart(id, map, { horizontal = false, max = 12, ordered = false } = {}) {
+  let entries = ordered ? [...map] : sortedEntries(map);
+  if (!ordered) entries = entries.slice(0, max);
+  const data = entries;
   mountChart(id, {
     type: 'bar',
     data: {
@@ -180,9 +183,7 @@ function barChart(id, map, { horizontal = false, max = 12 } = {}) {
         data: data.map((d) => d[1]),
         backgroundColor: data.map((_, i) => PALETTE[i % PALETTE.length] + 'd9'),
         borderColor: data.map((_, i) => PALETTE[i % PALETTE.length]),
-        borderWidth: 1.2,
-        borderRadius: 7,
-        maxBarThickness: horizontal ? 22 : 44
+        borderWidth: 1.2, borderRadius: 6, maxBarThickness: horizontal ? 22 : 44
       }]
     },
     options: barOpts(horizontal)
@@ -198,10 +199,8 @@ function doughnutChart(id, map) {
       labels: empty ? ['Sem dados'] : entries.map((d) => d[0]),
       datasets: [{
         data: empty ? [1] : entries.map((d) => d[1]),
-        backgroundColor: (empty ? ['#e7e3f0'] : entries.map((_, i) => PALETTE[i % PALETTE.length])).map((c) => c + (c.startsWith('#') && c.length === 7 ? 'e6' : '')),
-        borderColor: 'transparent',
-        borderWidth: 0,
-        hoverOffset: 8
+        backgroundColor: (empty ? ['#e7e3f0'] : entries.map((_, i) => PALETTE[i % PALETTE.length])),
+        borderColor: '#fff', borderWidth: 2, hoverOffset: 8
       }]
     },
     options: {
@@ -211,99 +210,216 @@ function doughnutChart(id, map) {
         ...commonOpts().plugins,
         legend: {
           position: 'right',
-          labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 11, font: { size: 11.5, family: 'Inter' }, color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() }
+          labels: { usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 12, boxHeight: 12, padding: 11, font: { size: 11.5, family: 'Inter' }, color: cssVar('--text-soft') }
         }
       }
     }
   });
 }
 
-function ageBuckets(f) {
-  const buckets = new Map();
-  if (!f) return buckets;
-  for (const rec of app.records) {
-    const n = Number(String(getValue(rec, f)).replace(',', '.'));
-    if (!Number.isFinite(n)) continue;
-    const label = n < 18 ? '0–17' : n < 25 ? '18–24' : n < 35 ? '25–34' : n < 45 ? '35–44' : n < 55 ? '45–54' : '55+';
-    buckets.set(label, (buckets.get(label) || 0) + 1);
+function ageBucketsMap(map) {
+  const ordenada = ['0–17', '18–24', '25–34', '35–44', '45–54', '55+'];
+  return ordenada.map((k) => [k, map.get(k) || 0]);
+}
+
+function crossTabToSeries(ct, keyA) {
+  const out = {};
+  for (const [a, obj] of Object.entries(ct || {})) {
+    out[a] = obj;
   }
-  return buckets;
+  return out;
 }
 
-function renderKpis() {
-  const total = app.records.length;
-  setKpi('kpiTotal', total);
-  $('kpiTotalSub').textContent = total === 0 ? 'aguardando respostas' : `${total === 1 ? 'resposta recebida' : 'respostas recebidas'}`;
-
-  const fIdade = field('Idade:');
-  const ages = app.records
-    .map((r) => Number(String(getValue(r, fIdade)).replace(',', '.')))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  const avg = ages.length ? ages.reduce((a, b) => a + b, 0) / ages.length : 0;
-  setKpi('kpiIdade', ages.length ? Number(avg.toFixed(1)) : 0, ages.length ? 1 : 0);
-  $('kpiIdadeSub').textContent = ages.length ? `anos · ${ages.length} informado(s)` : 'sem idades informadas';
-
-  const zona = countsOf(field('Zona:'));
-  const urb = zona.get('Urbana') || 0;
-  const urbPct = total ? Math.round((urb / total) * 100) : 0;
-  setKpi('kpiUrbana', urbPct, 0);
-  $('kpiUrbanaSub').textContent = total ? `${urb} de ${total} registros` : 'das residências informadas';
-
-  const acomp = countsOf(field('É acompanhado pelo'));
-  const acompTotal = [...acomp.values()].reduce((a, b) => a + b, 0);
-  setKpi('kpiAcomp', acompTotal);
-  $('kpiAcompSub').textContent = 'CRASS / CREAS';
-
-  const fQtd = field('Se sim, quantos');
-  const filhos = app.records.reduce((acc, r) => {
-    const n = Number(getValue(r, fQtd));
-    return acc + (Number.isFinite(n) ? n : 0);
-  }, 0);
-  setKpi('kpiFilhos', filhos);
-  $('kpiFilhosSub').textContent = 'filhos informados';
-
-  const serv = countsOf(field('Quais serviços'), { multi: true });
-  setKpi('kpiServicos', sortedEntries(serv).filter(([, v]) => v > 0).length);
-  $('kpiServicosSub').textContent = 'itens distintos acessados';
+// ---------- KPIs ----------
+function renderKpis(agg) {
+  setKpi('kpiTotal', agg.total);
+  $('kpiTotalSub').textContent = agg.total === 0 ? 'aguardando respostas' : `${agg.total} resposta${agg.total === 1 ? '' : 's'} recebida${agg.total === 1 ? '' : 's'}`;
+  setKpi('kpiNovos7d', agg.n);
+  $('kpiNovos7dSub').textContent = 'novos no período selecionado';
+  setKpi('kpiMunicipios', agg.volumetria.cidadesAlcancadas);
+  $('kpiMunicipiosSub').textContent = 'de 22 municípios do Acre';
+  const rendaBaixa = mget(agg.socioeconomico.renda, 'Inferior meio salário mínimo');
+  const meio = mget(agg.socioeconomico.renda, 'De meio a 1 salário mínimo');
+  setKpi('kpiRendaBaixa', agg.n ? Math.round(((rendaBaixa + meio) / agg.n) * 100) : 0);
+  $('kpiRendaBaixaSub').textContent = '% dos cadastros com renda baixa';
+  setKpi('kpiServicos', agg.servicos.distinct);
+  $('kpiServicosSub').textContent = 'serviços distintos acessados';
+  setKpi('kpiCompletude', agg.qualidade.mediaCompletude, 1);
+  $('kpiCompletudeSub').textContent = '% dos campos preenchidos por cadastro';
+  setKpi('kpiDup', agg.qualidade.duplicidadesCPF.length + agg.qualidade.duplicidadesRG.length);
+  $('kpiDupSub').textContent = 'CPF ou RG repetidos';
 }
 
-function renderCharts() {
-  barChart('chartCidade', countsOf(field('Cidade da residência atual')), { horizontal: true, max: 25 });
-  doughnutChart('chartGenero', countsOf(field('Identidade de gênero')));
-  doughnutChart('chartZona', countsOf(field('Zona:')));
-  barChart('chartRaca', countsOf(field('Raça/Cor/Etnia')));
-  barChart('chartOrientacao', countsOf(field('Orientação Sexual')), { horizontal: true });
-  barChart('chartIdade', ageBuckets(field('Idade:')));
-  barChart('chartRenda', countsOf(field('Renda Familiar per capita')), { horizontal: true });
-  doughnutChart('chartTrabalha', countsOf(field('Trabalha?')));
-  doughnutChart('chartNacionalidade', countsOf(field('Nacionalidade')));
-  doughnutChart('chartFilhos', countsOf(field('Possui Filhos?')));
-  doughnutChart('chartAuxilio', countsOf(field('recebe algum auxílio')));
-  doughnutChart('chartDeficiencia', countsOf(field('possui alguma deficiência')));
-  doughnutChart('chartMigrante', countsOf(field('Migrante?')));
+// ---------- Charts ----------
+function renderCharts(agg) {
+  const d = agg.demografia;
+  doughnutChart('chartGenero', d.genero);
+  doughnutChart('chartZona', d.zona);
+  barChart('chartRaca', d.raca);
+  barChart('chartOrientacao', d.orientacao, { horizontal: true });
+  barChart('chartIdade', ageBucketsMap(d.idade.buckets.reduce((m, [k, v]) => { m.set(k, v); return m; }, new Map())));
+  barChart('chartUfNascimento', d.ufNascimento, { horizontal: true, max: 14 });
+  barChart('chartCidadeNascimento', d.cidadeNascimento, { horizontal: true, max: 10 });
+  doughnutChart('chartNacionalidade', d.nacionalidade);
 
-  barChart('chartNivel', countsOf(field('Nível:')));
-  barChart('chartTurno', countsOf(field('Turno:')));
-  barChart('chartSuperior', countsOf(field('Se superior, qual')));
-  barChart('chartIngresso', countsOf(field('Ano de Ingresso')));
+  const s = agg.socioeconomico;
+  barChart('chartVinculo', s.vinculo);
+  doughnutChart('chartFilhosSimNao', s.filhosSimNao);
+  barChart('chartFilhosDist', Object.entries(s.filhosDist || {}));
+  const rendaXzona = s.rendaXzona || {};
+  const rendaSeries = Object.keys(rendaXzona).map((a) => [a, Object.values(rendaXzona[a] || {}).reduce((x, y) => x + y, 0)]);
+  barChart('chartRendaXzona', rendaSeries, { horizontal: true });
 
-  doughnutChart('chartAcompanhado', countsOf(field('É acompanhado pelo')));
-  barChart('chartServicos', countsOf(field('Quais serviços'), { multi: true }), { horizontal: true, max: 25 });
+  const b = agg.beneficios;
+  doughnutChart('chartBeneficio', b.recebe);
+  barChart('chartTipoBeneficio', b.tipo, { horizontal: true });
+  doughnutChart('chartDeficiencia', b.deficiencia);
+  barChart('chartTipoDeficiencia', b.tipoDeficiencia, { horizontal: true });
+  doughnutChart('chartMigrante', b.migrante);
+
+  const e = agg.educacao;
+  barChart('chartNivel', e.nivel);
+  barChart('chartCursoSuperior', e.cursoSuperior, { horizontal: true });
+  doughnutChart('chartTurno', e.turno);
+  doughnutChart('chartSemestre', e.semestre);
+  barChart('chartIngresso', e.ingresso);
+
+  const sv = agg.servicos;
+  barChart('chartServicos', sv.ranking, { horizontal: true, max: 15 });
+  barChart('chartHistServicos', sv.histograma || []);
+
+  const q = agg.qualidade;
+  barChart('chartRespostaCampo', q.respostaPorCampo.map((r) => [r.campo, r.n]), { horizontal: true, max: 10 });
+  doughnutChart('chartCompletude', q.completudeDist || {});
 }
 
+// ---------- Evolução ----------
+function renderEvolucao(agg) {
+  const serie = agg.serieTemporal || [];
+  const dias = serie.map((s) => s.dia);
+  const novos = serie.map((s) => s.novos);
+  const acum = serie.map((s) => s.acumulado);
+  mountChart('chartEvolucao', {
+    type: 'bar',
+    data: {
+      labels: dias,
+      datasets: [
+        { label: 'Novos no dia', data: novos, backgroundColor: PALETTE[0] + 'd9', borderColor: PALETTE[0], borderWidth: 1, borderRadius: 4 },
+        { label: 'Acumulado', data: acum, type: 'line', borderColor: PALETTE[4], backgroundColor: PALETTE[4] + '1a', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 3 }
+      ]
+    },
+    options: {
+      ...commonOpts(),
+      scales: {
+        x: { grid: { display: false, color: cssVar('--chart-grid') }, ticks: { color: cssVar('--text-soft'), font: { size: 10, family: 'Inter' }, maxRotation: 45, autoSkip: true }, border: { display: false } },
+        y: { grid: { color: cssVar('--chart-grid') }, ticks: { color: cssVar('--text-soft'), font: { size: 11, family: 'Inter' }, precision: 0, beginAtZero: true }, border: { display: false } }
+      },
+      plugins: { ...commonOpts().plugins, legend: { position: 'top', labels: { padding: 20, font: { size: 11.5, family: 'Inter' }, color: cssVar('--text-soft') } } }
+    }
+  });
+}
+
+// ---------- Mapa ----------
+function initMap() {
+  if (!window.L) return;
+  const container = $('mapa');
+  if (!container) return;
+  if (app.map) { app.map.remove(); app.mapLayers.clear(); }
+  const map = L.map(container, { attributionControl: false, zoomControl: true, minZoom: 6, maxZoom: 13, zoomDelta: 0.5, wheelPxPerZoomLevel: 120 });
+  app.map = map;
+  const dark = document.documentElement.dataset.theme === 'dark';
+  const escala = dark ? SCALE_DARK : SCALE;
+  fetch('/geo/acre-municipios.geojson')
+    .then((r) => r.json())
+    .then((geo) => {
+      const counts = new Map();
+      if (window.aggCobertura) {
+        for (const c of window.aggCobertura) counts.set(c.nome, c.n);
+      }
+      const maxCount = Math.max(...Array.from(counts.values()), 1);
+      const breaks = [maxCount * 0.25, maxCount * 0.5, maxCount * 0.75];
+      function fillFor(n) {
+        if (!n) return dark ? '#2a263c' : '#f2f2f4';
+        if (n <= breaks[0]) return escala[0];
+        if (n <= breaks[1]) return escala[1];
+        if (n <= breaks[2]) return escala[2];
+        return escala[3];
+      }
+      const layer = L.geoJSON(geo, {
+        style: (feat) => {
+          const nome = feat.properties.nome;
+          const n = counts.get(nome) || 0;
+          const selecionado = app.cidadeFiltro === nome;
+          return {
+            fillColor: fillFor(n),
+            color: selecionado ? (dark ? '#f4a06a' : '#f0873f') : cssVar('--border'),
+            weight: selecionado ? 3 : 1,
+            fillOpacity: 0.85,
+            dashArray: n ? '' : '2 2'
+          };
+        },
+        onEachFeature: (feat, layer) => {
+          const nome = feat.properties.nome;
+          const n = counts.get(nome) || 0;
+          const pct = aggN ? Math.round((n / aggN) * 100) : 0;
+          layer.bindTooltip(`<b>${nome}</b><br>${n} cadastro${n === 1 ? '' : 's'} (${pct}%)`, { sticky: true, className: 'mapa-tooltip' });
+          layer.on('click', () => setCidadeFiltro(nome));
+          app.mapLayers.set(nome, layer);
+        }
+      }).addTo(map);
+      map.fitBounds(layer.getBounds(), { padding: [40, 40] });
+      map.on('click', () => setCidadeFiltro(null));
+      renderMapaTabela(agg.cobertura || []);
+    });
+}
+
+let aggN = 0;
+function renderMapaTabela(cobertura) {
+  const tbody = $('tbodyMunicipio');
+  if (!tbody) return;
+  tbody.innerHTML = cobertura.map((c) => {
+    const sel = app.cidadeFiltro === c.nome;
+    return `<tr${sel ? ' style="background:var(--brand-soft);font-weight:600"' : ''}>
+      <td>${esc(c.nome)}</td>
+      <td data-key="n">${c.n}</td>
+      <td data-key="pct">${c.pct}</td>
+      <td data-key="mediaIdade">${c.mediaIdade}</td>
+      <td data-key="comServicoPct">${c.comServicoPct}</td>
+    </tr>`;
+  }).join('');
+  tbody.querySelectorAll('tr').forEach((tr) => {
+    tr.addEventListener('click', () => {
+      const nome = tr.children[0].textContent.trim();
+      setCidadeFiltro(nome === app.cidadeFiltro ? null : nome);
+    });
+  });
+}
+
+function highlightMapa(nome) {
+  if (!app.mapLayers) return;
+  app.mapLayers.forEach((layer, key) => {
+    const selecionado = key === nome;
+    layer.setStyle({
+      color: selecionado ? (document.documentElement.dataset.theme === 'dark' ? '#f4a06a' : '#f0873f') : cssVar('--border'),
+      weight: selecionado ? 3 : 1
+    });
+    if (selecionado && app.map) app.map.flyToBounds(layer.getBounds(), { padding: [40, 40] });
+  });
+}
+
+// ---------- Tabela de registros (paginada no servidor) ----------
 const TABLE_COLS = [
-  { key: 'nome', label: 'Nome', get: (r) => r.__nome, html: (r) => esc(r.__nome) || '<span class="masked">sem nome</span>' },
-  { key: 'idade', label: 'Idade', get: (r) => r.__idade, html: (r) => esc(r.__idade) },
-  { key: 'cidade', label: 'Cidade', get: (r) => r.__cidade, html: (r) => esc(r.__cidade) },
-  { key: 'zona', label: 'Zona', get: (r) => r.__zona, html: (r) => r.__zona ? `<span class="pill">${esc(r.__zona)}</span>` : '' },
-  { key: 'genero', label: 'Gênero', get: (r) => r.__genero, html: (r) => esc(r.__genero) },
-  { key: 'trabalha', label: 'Trabalha', get: (r) => r.__trabalha, html: (r) => esc(r.__trabalha) },
-  { key: 'renda', label: 'Renda per capita', get: (r) => r.__renda, html: (r) => esc(r.__renda) },
-  { key: 'acomp', label: 'Acompanhamento', get: (r) => r.__acomp, html: (r) => r.__acomp ? `<span class="pill">${esc(r.__acomp)}</span>` : '' },
-  { key: 'servicos', label: 'Serviços', get: (r) => r.__servicos.length, html: (r) => r.__servicos.length ? `<span class="pill">${r.__servicos.length}</span>` : '' },
-  { key: 'rg', label: 'RG', get: (r) => r.__rg, html: (r) => (r.__rg ? (app.reveal ? esc(r.__rg) : '<span class="masked">•••••</span>') : '') },
-  { key: 'cpf', label: 'CPF', get: (r) => r.__cpf, html: (r) => (r.__cpf ? (app.reveal ? esc(r.__cpf) : '<span class="masked">••••••••</span>') : '') },
-  { key: 'envio', label: 'Envio', get: (r) => r.__envioTs, html: (r) => esc(r.__envio) }
+  { key: 'nome', label: 'Nome', get: (r) => r.Nome_do_usu_rio, html: (r) => esc(r.Nome_do_usu_rio) || '<span class="masked">sem nome</span>' },
+  { key: 'idade', label: 'Idade', get: (r) => r.Idade, html: (r) => esc(r.Idade) },
+  { key: 'cidade', label: 'Cidade', get: (r) => r.Cidade_da_resid_ncia_atual, html: (r) => esc(r.Cidade_da_resid_ncia_atual) },
+  { key: 'zona', label: 'Zona', get: (r) => r.Zona, html: (r) => r.Zona ? `<span class="pill">${esc(r.Zona)}</span>` : '' },
+  { key: 'genero', label: 'Gênero', get: (r) => r.Identidade_de_G_nero, html: (r) => esc(r.Identidade_de_G_nero) },
+  { key: 'trabalha', label: 'Trabalha', get: (r) => r.Trabalha, html: (r) => esc(r.Trabalha) },
+  { key: 'renda', label: 'Renda per capita', get: (r) => r.Renda_Familiar_per_capita, html: (r) => esc(r.Renda_Familiar_per_capita) },
+  { key: 'servicos', label: 'Serviços', get: (r) => r.__service_count, html: (r) => r.__service_count ? `<span class="pill">${r.__service_count}</span>` : '' },
+  { key: 'rg', label: 'RG', get: (r) => r.RG, html: (r) => (r.RG ? (app.reveal ? esc(r.RG) : '<span class="masked">•••••</span>') : '') },
+  { key: 'cpf', label: 'CPF', get: (r) => r.CPF, html: (r) => (r.CPF ? (app.reveal ? esc(r.CPF) : '<span class="masked">••••••••</span>') : '') },
+  { key: 'envio', label: 'Envio', get: (r) => r.__envio, html: (r) => esc(r.__envio) }
 ];
 
 function esc(v) {
@@ -311,100 +427,185 @@ function esc(v) {
   return String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function enrich(rec) {
-  const get = (label) => getValue(rec, field(label));
-  const servicos = get('Quais serviços');
-  const envio = rec._submission_time || rec._id || '';
-  return {
-    ...rec,
-    __nome: get('Nome do usuário'),
-    __idade: get('Idade:'),
-    __rg: get('RG:'),
-    __cpf: get('CPF:'),
-    __cidade: get('Cidade da residência atual'),
-    __zona: get('Zona:'),
-    __genero: get('Identidade de gênero'),
-    __trabalha: get('Trabalha?'),
-    __renda: get('Renda Familiar per capita'),
-    __acomp: get('É acompanhado pelo'),
-    __servicos: Array.isArray(servicos) ? servicos : [],
-    __telefone: get('Telefone'),
-    __envio: fmtDate(envio),
-    __envioTs: envio ? new Date(envio).getTime() || 0 : 0
-  };
-}
-
-function filteredRows() {
-  const q = normKey(app.search);
-  let rows = app.records.map(enrich);
-  if (q) {
-    rows = rows.filter((r) =>
-      [r.__nome, r.__cidade, r.__telefone, r.__genero, r.__renda, r.__acomp, r.__zona, ...r.__servicos]
-        .some((v) => normKey(v).includes(q))
-    );
-  }
-  const { key, dir } = app.sort;
-  const col = TABLE_COLS.find((c) => c.key === key) || TABLE_COLS[0];
-  rows.sort((a, b) => {
-    const av = col.get(a), bv = col.get(b);
-    let r;
-    if (typeof av === 'number' && typeof bv === 'number') r = av - bv;
-    else r = normKey(av).localeCompare(normKey(bv));
-    return dir === 'asc' ? r : -r;
-  });
-  return rows;
-}
-
-function renderTable() {
-  const has = app.records.length > 0;
+function renderTableState({ rows, total, page, pages, size }) {
+  const has = total > 0;
   $('emptyState').hidden = has;
   $('tableCard').hidden = !has;
   if (!has) return;
 
-  const rows = filteredRows();
-  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  app.page = Math.min(Math.max(1, app.page), pages);
-  const slice = rows.slice((app.page - 1) * PAGE_SIZE, app.page * PAGE_SIZE);
-
   const thead = $('dataTable').querySelector('thead');
   const tbody = $('dataTable').querySelector('tbody');
-
   thead.innerHTML = `<tr>${TABLE_COLS.map((c) =>
     `<th data-key="${c.key}" class="${app.sort.key === c.key ? 'sorted' : ''}">${c.label}${app.sort.key === c.key ? (app.sort.dir === 'asc' ? ' ↑' : ' ↓') : ''}</th>`
   ).join('')}</tr>`;
 
-  tbody.innerHTML = slice.map((r) => {
-    const fresh = app.freshIds.has(r._id || r._uuid) ? ' class="fresh"' : '';
-    return `<tr${fresh}>${TABLE_COLS.map((c) => `<td>${c.html(r)}</td>`).join('')}</tr>`;
-  }).join('');
+  tbody.innerHTML = rows.map((r) =>
+    `<tr>${TABLE_COLS.map((c) => `<td>${c.html(r)}</td>`).join('')}</tr>`
+  ).join('');
 
   thead.querySelectorAll('th').forEach((th) => {
     th.addEventListener('click', () => {
       const key = th.dataset.key;
       if (app.sort.key === key) app.sort.dir = app.sort.dir === 'asc' ? 'desc' : 'asc';
       else app.sort = { key, dir: 'asc' };
-      renderTable();
+      loadSubmissions();
     });
   });
 
-  $('tableCount').textContent = `${rows.length} ${rows.length === 1 ? 'registro' : 'registros'}${rows.length !== app.records.length ? ` (filtrados de ${app.records.length})` : ''}`;
-  $('pageInfo').textContent = `Página ${app.page} de ${pages}`;
-  $('prevPage').disabled = app.page <= 1;
-  $('nextPage').disabled = app.page >= pages;
+  $('tableCount').textContent = `${total} ${total === 1 ? 'registro' : 'registros'}`;
+  $('pageInfo').textContent = `Página ${page} de ${pages}`;
+  $('prevPage').disabled = page <= 1;
+  $('nextPage').disabled = page >= pages;
 }
 
-function renderAll() {
-  renderKpis();
-  renderCharts();
-  renderTable();
+async function loadSubmissions() {
+  const url = new URL(API_SUBMISSIONS, window.location.origin);
+  url.searchParams.set('page', app.page);
+  url.searchParams.set('size', PAGE_SIZE);
+  if (app.cidadeFiltro) url.searchParams.set('city', app.cidadeFiltro);
+  if (app.search) url.searchParams.set('q', app.search);
+  if (app.periodoFiltro !== 'todos') url.searchParams.set('days', app.periodoFiltro);
+  url.searchParams.set('sort', app.sort.key);
+  url.searchParams.set('dir', app.sort.dir);
+  try {
+    const json = await fetch(url, { cache: 'no-store' }).then((r) => r.json());
+    renderTableState({ rows: json.rows || [], total: json.total || 0, page: json.page || 1, pages: json.pages || 1, size: PAGE_SIZE });
+  } catch (err) {
+    showError(`Falha ao carregar registros: ${err.message}`);
+  }
 }
 
-function showToast(msg) {
-  const t = $('toast');
-  t.textContent = msg;
-  t.hidden = false;
-  clearTimeout(t._h);
-  t._h = setTimeout(() => { t.hidden = true; }, 5200);
+// ---------- Agregado principal ----------
+async function loadAggregate() {
+  const url = new URL(API_AGGREGATE, window.location.origin);
+  if (app.cidadeFiltro) url.searchParams.set('city', app.cidadeFiltro);
+  if (app.periodoFiltro !== 'todos') url.searchParams.set('days', app.periodoFiltro);
+  try {
+    const json = await fetch(url, { cache: 'no-store' }).then((r) => r.json());
+    window.aggCobertura = json.cobertura || [];
+    aggN = json.n || 0;
+    renderKpis(json);
+    renderCharts(json);
+    renderEvolucao(json);
+    renderMapaTabela(json.cobertura || []);
+    if (app.map) {
+      const evt = new CustomEvent('mapa:dados', { detail: { cobertura: json.cobertura || [], n: json.n || 0, cidade: app.cidadeFiltro } });
+      window.dispatchEvent(evt);
+    }
+    updateChips();
+    showError(null);
+  } catch (err) {
+    showError(`Falha ao carregar agregados: ${err.message}`);
+  }
+}
+
+async function initMapa() {
+  await loadAggregate();
+  initMap();
+  window.addEventListener('mapa:dados', (ev) => {
+    if (!app.map) return;
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const escala = dark ? SCALE_DARK : SCALE;
+    const counts = new Map();
+    const maxCount = Math.max(...ev.detail.cobertura.map((c) => c.n), 1);
+    const breaks = [maxCount * 0.25, maxCount * 0.5, maxCount * 0.75];
+    for (const c of ev.detail.cobertura) counts.set(c.nome, c.n);
+    app.mapLayers.forEach((layer, nome) => {
+      const n = counts.get(nome) || 0;
+      const selecionado = nome === ev.detail.cidade;
+      let fill;
+      if (!n) fill = dark ? '#2a263c' : '#f2f2f4';
+      else if (n <= breaks[0]) fill = escala[0];
+      else if (n <= breaks[1]) fill = escala[1];
+      else if (n <= breaks[2]) fill = escala[2];
+      else fill = escala[3];
+      layer.setStyle({ fillColor: fill, color: selecionado ? (dark ? '#f4a06a' : '#f0873f') : cssVar('--border'), weight: selecionado ? 3 : 1, dashArray: n ? '' : '2 2' });
+    });
+    renderMapaTabela(ev.detail.cobertura);
+  });
+}
+
+function setCidadeFiltro(nome) {
+  app.cidadeFiltro = nome;
+  const sel = $('filtroMunicipio');
+  if (sel) sel.value = nome || '';
+  updateChips();
+  loadAggregate();
+  loadSubmissions();
+}
+
+function updateChips() {
+  const chips = $('chips');
+  const btnClear = $('btnLimparChips');
+  const tem = app.cidadeFiltro || (app.periodoFiltro !== 'todos');
+  chips.innerHTML = '';
+  btnClear.hidden = !tem;
+  if (app.cidadeFiltro) {
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.innerHTML = `<span>Município: ${esc(app.cidadeFiltro)}</span><button class="chip-remover" data-tipo="cidade">×</button>`;
+    chip.querySelector('button').addEventListener('click', () => setCidadeFiltro(null));
+    chips.appendChild(chip);
+  }
+  if (app.periodoFiltro !== 'todos') {
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.innerHTML = `<span>Período: últimos ${app.periodoFiltro} dias</span><button class="chip-remover" data-tipo="periodo">×</button>`;
+    chip.querySelector('button').addEventListener('click', () => { app.periodoFiltro = 'todos'; $('filtroPeriodo').value = 'todos'; updateChips(); loadAggregate(); loadSubmissions(); });
+    chips.appendChild(chip);
+  }
+}
+
+// ---------- Tema ----------
+function initTema() {
+  const btn = $('themeToggle');
+  const icon = $('themeIcon');
+  const text = $('themeText');
+  const saved = localStorage.getItem('dashboard:theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const theme = saved || (prefersDark ? 'dark' : 'light');
+  document.documentElement.dataset.theme = theme;
+  icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+  text.textContent = theme === 'dark' ? 'Claro' : 'Escuro';
+  btn.addEventListener('click', () => {
+    const atual = document.documentElement.dataset.theme;
+    const novo = atual === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = novo;
+    localStorage.setItem('dashboard:theme', novo);
+    icon.textContent = novo === 'dark' ? '☀️' : '🌙';
+    text.textContent = novo === 'dark' ? 'Claro' : 'Escuro';
+    app.charts.forEach((c) => c.destroy());
+    app.charts.clear();
+    loadAggregate();
+  });
+}
+
+// ---------- SSE ----------
+function connectStream() {
+  let retry = 1000;
+  const es = new EventSource(API_STREAM);
+  es.addEventListener('hello', () => {
+    retry = 1000;
+    setLive('online', 'Tempo real');
+    showError(null);
+  });
+  es.addEventListener('stats', (ev) => {
+    setLive('online', 'Tempo real');
+    try {
+      const p = JSON.parse(ev.data);
+      if (p.version != null && p.version !== app.lastVersion) {
+        app.lastVersion = p.version;
+        loadAggregate();
+        loadSubmissions();
+      }
+    } catch { /* ignora */ }
+  });
+  es.addEventListener('error', () => {
+    es.close();
+    setLive('offline', 'Reconectando…');
+    setTimeout(connectStream, retry);
+    retry = Math.min(retry * 2, 30000);
+  });
 }
 
 function setLive(status, text) {
@@ -421,34 +622,57 @@ function showError(msg) {
   b.hidden = false;
 }
 
-async function loadData({ toast = false } = {}) {
-  const btn = $('btnRefresh');
-  btn.disabled = true;
-  try {
-    const res = await fetch(API_DATA, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    applyData(json.results || [], json.count, json.lastUpdated);
-    if (toast) showToast('Dados atualizados manualmente');
-    showError(null);
-  } catch (err) {
-    showError(`Falha ao carregar dados: ${err.message}`);
-  } finally {
-    btn.disabled = false;
-  }
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(t._h);
+  t._h = setTimeout(() => { t.hidden = true; }, 5200);
 }
 
-function applyData(results, count, lastUpdated) {
-  const prev = app.lastCount;
-  if (results.length > prev && prev > 0) {
-    app.freshIds = new Set(results.slice(0, results.length - prev).map((r) => r._id || r._uuid));
-    showToast(`${results.length - prev} novo(s) cadastro(s) recebido(s)`);
-  }
-  app.records = results;
-  app.lastCount = count ?? results.length;
-  $('lastUpdated').dataset.iso = lastUpdated || '';
-  $('lastUpdated').textContent = fmtTime(lastUpdated);
-  renderAll();
+function bind() {
+  $('btnRefresh').addEventListener('click', () => { loadAggregate(); loadSubmissions(); showToast('Dados atualizados'); });
+  $('errorClose').addEventListener('click', () => showError(null));
+
+  $('filtroPeriodo').addEventListener('change', (e) => {
+    app.periodoFiltro = e.target.value;
+    app.page = 1;
+    updateChips();
+    loadAggregate();
+    loadSubmissions();
+  });
+
+  $('filtroMunicipio').addEventListener('change', (e) => {
+    setCidadeFiltro(e.target.value || null);
+  });
+
+  $('btnLimparFiltros').addEventListener('click', () => {
+    app.cidadeFiltro = null;
+    app.periodoFiltro = 'todos';
+    $('filtroMunicipio').value = '';
+    $('filtroPeriodo').value = 'todos';
+    updateChips();
+    loadAggregate();
+    loadSubmissions();
+  });
+
+  $('searchInput').addEventListener('input', (e) => {
+    app.search = e.target.value;
+    app.page = 1;
+    loadSubmissions();
+  });
+
+  $('revealSensitive').addEventListener('change', (e) => {
+    app.reveal = e.target.checked;
+    loadSubmissions();
+  });
+
+  $('prevPage').addEventListener('click', () => { app.page--; loadSubmissions(); });
+  $('nextPage').addEventListener('click', () => { app.page++; loadSubmissions(); });
+
+  setInterval(() => {
+    $('lastUpdated').textContent = fmtTime($('lastUpdated').dataset.iso || null);
+  }, 20000);
 }
 
 async function loadSchema() {
@@ -458,6 +682,7 @@ async function loadSchema() {
     const json = await res.json();
     app.schema = json.schema;
     app.fields = json.schema?.fields || [];
+    app.choices = json.schema?.choices || {};
     if (app.schema?.title) {
       $('projectTitle').textContent = app.schema.title;
       document.title = `${app.schema.title} — Dashboard`;
@@ -466,69 +691,30 @@ async function loadSchema() {
       $('projectSubtitle').textContent = `${app.schema.description} · Juntos Pelo Acre`;
     }
     if (app.schema?.formUrl) {
-      $('formLinks').innerHTML = `<a class="btn btn-primary" href="${app.schema.formUrl}" target="_blank" rel="noopener">Abrir formulário ↗</a>`;
       $('footerForm').href = app.schema.formUrl;
       $('footerForm').hidden = false;
     }
+    // preencher select de municípios
+    const sel = $('filtroMunicipio');
+    const fCidade = field('Cidade da residência atual');
+    const cidades = new Set();
+    for (const rec of app.records) {
+      const v = getValue(rec, fCidade);
+      if (v) cidades.add(v);
+    }
+    sel.innerHTML = '<option value="">Todos os municípios</option>' + [...cidades].sort().map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
     $('footerInfo').textContent = `Dados via KoboToolbox API · ${app.fields.length} campos monitorados`;
   } catch (err) {
     showError(`Falha ao carregar o schema do formulário: ${err.message}`);
   }
 }
 
-function connectStream() {
-  let retry = 1000;
-  const es = new EventSource(API_STREAM);
-
-  es.addEventListener('hello', () => {
-    retry = 1000;
-    setLive('online', 'Tempo real');
-    showError(null);
-  });
-
-  es.addEventListener('data', (ev) => {
-    setLive('online', 'Tempo real');
-    try {
-      const payload = JSON.parse(ev.data);
-      applyData(payload.results || [], payload.count, payload.lastUpdated);
-    } catch { /* payload inválido: ignora */ }
-  });
-
-  es.addEventListener('error', () => {
-    es.close();
-    setLive('offline', 'Reconectando…');
-    setTimeout(connectStream, retry);
-    retry = Math.min(retry * 2, 30000);
-  });
-}
-
-function bind() {
-  $('btnRefresh').addEventListener('click', () => loadData({ toast: true }));
-  $('errorClose').addEventListener('click', () => showError(null));
-
-  $('searchInput').addEventListener('input', (e) => {
-    app.search = e.target.value;
-    app.page = 1;
-    renderTable();
-  });
-
-  $('revealSensitive').addEventListener('change', (e) => {
-    app.reveal = e.target.checked;
-    renderTable();
-  });
-
-  $('prevPage').addEventListener('click', () => { app.page--; renderTable(); });
-  $('nextPage').addEventListener('click', () => { app.page++; renderTable(); });
-
-  setInterval(() => {
-    $('lastUpdated').textContent = fmtTime($('lastUpdated').dataset.iso || null);
-  }, 20000);
-}
-
 async function init() {
   bind();
+  initTema();
   await loadSchema();
-  await loadData();
+  await initMapa();
+  await loadSubmissions();
   connectStream();
 }
 
