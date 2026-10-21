@@ -5,8 +5,7 @@ import path from 'node:path';
 import {
   CONFIG,
   fetchSchema as koboFetchSchema,
-  fetchIncremental,
-  loadGeoJSON
+  fetchIncremental
 } from '../lib/kobo.js';
 import { computeAggregates, cityName, getValue } from '../lib/aggregate.js';
 import { resolveField } from '../lib/normalize.js';
@@ -14,6 +13,7 @@ import { resolveField } from '../lib/normalize.js';
 const __dirname = path.dirname(path.resolve());
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'application/javascript',
@@ -173,7 +173,7 @@ async function handleRequest(req, res) {
     });
     const start = (page - 1) * size;
     const slice = rows.slice(start, start + size);
-    const pages = Math.max(1, Math.ceil(total / size));
+    const pages = Math.max(1, Math.ceil(rows.length / size));
     return json(res, 200, {
       rows: slice.map((r) => ({
         ...r,
@@ -237,7 +237,7 @@ async function handleRequest(req, res) {
   if (!filePath.startsWith(PUBLIC_DIR)) return json(res, 403, { error: 'Proibido' });
   try {
     const data = await fs.readFile(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    res.writeHead(200, { 'Content-Type': MIME_TYPES[path.extname(filePath)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(data);
   } catch {
     json(res, 404, { error: 'Não encontrado' });
@@ -305,13 +305,27 @@ async function init() {
   } catch (err) {
     console.warn('[geo] falha ao carregar acre-municipios.geojson:', err.message);
   }
-  pollOnce({ silent: true }).catch(() => {});
-  setInterval(() => pollOnce(), CONFIG.pollIntervalMs);
-  setInterval(() => koboFetchSchema().catch(() => {}), 5 * 60 * 1000);
+  pollOnce({ silent: true }).catch(() => { });
+  if (typeof process.env.VERCEL === 'undefined') {
+    setInterval(() => pollOnce(), CONFIG.pollIntervalMs);
+    setInterval(() => koboFetchSchema().catch(() => { }), 5 * 60 * 1000);
+  }
+}
+
+let initPromise;
+function startInit() {
+  if (!initPromise) initPromise = init();
+  return initPromise;
 }
 
 export default async (req, res) => {
-  await handleRequest(req, res);
+  startInit();
+  try {
+    await handleRequest(req, res);
+  } catch (err) {
+    console.error('[request] falha:', err);
+    if (!res.headersSent) json(res, 500, { error: 'Erro interno do servidor' });
+  }
 };
 
 if (typeof process.env.VERCEL === 'undefined') {
@@ -319,6 +333,5 @@ if (typeof process.env.VERCEL === 'undefined') {
   server.listen(CONFIG.port, () => {
     console.log(`Dashboard em http://localhost:${CONFIG.port}`);
   });
-  pollOnce({ silent: true }).catch(() => {});
-  setInterval(() => pollOnce(), CONFIG.pollIntervalMs);
+  startInit();
 }

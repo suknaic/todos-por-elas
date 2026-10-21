@@ -13,6 +13,19 @@ const SCALE_DARK = ['#3a2d5c', '#4a3d70', '#8560c0', '#c3b0e2'];
 
 const $ = (id) => document.getElementById(id);
 
+async function fetchJson(input, options) {
+  const response = await fetch(input, options);
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}${text ? `: ${text.slice(0, 160)}` : ''}`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Resposta inválida do servidor (HTTP ${response.status})`);
+  }
+}
+
 const app = {
   schema: null,
   fields: [],
@@ -682,7 +695,7 @@ async function loadSubmissions() {
   url.searchParams.set('sort', app.sort.key);
   url.searchParams.set('dir', app.sort.dir);
   try {
-    const json = await fetch(url, { cache: 'no-store' }).then((r) => r.json());
+    const json = await fetchJson(url, { cache: 'no-store' });
     renderTableState({ rows: json.rows || [], total: json.total || 0, page: json.page || 1, pages: json.pages || 1, size: PAGE_SIZE });
   } catch (err) {
     showError(`Falha ao carregar registros: ${err.message}`);
@@ -695,7 +708,7 @@ async function loadAggregate() {
   if (app.cidadeFiltro) url.searchParams.set('city', app.cidadeFiltro);
   if (app.periodoFiltro !== 'todos') url.searchParams.set('days', app.periodoFiltro);
   try {
-    const json = await fetch(url, { cache: 'no-store' }).then((r) => r.json());
+    const json = await fetchJson(url, { cache: 'no-store' });
     window.aggCobertura = json.cobertura || [];
     aggN = json.n || 0;
     renderKpis(json);
@@ -908,9 +921,7 @@ function bind() {
 
 async function loadSchema() {
   try {
-    const res = await fetch(API_SCHEMA, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
+    const json = await fetchJson(API_SCHEMA, { cache: 'no-store' });
     app.schema = json.schema;
     app.fields = json.schema?.fields || [];
     app.choices = json.schema?.choices || {};
