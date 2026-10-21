@@ -24,8 +24,6 @@ build/
 .out/
 .cache/
 .coverage/
-public/styles.css
-public/vendor/
 
 # ---------------------------------------------------------------
 # Logs

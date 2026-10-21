@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build:css": "tailwindcss -c ./tailwind.config.cjs -i ./public/styles.src.css -o ./public/styles.css",
+    "build": "npm run build:css",
     "watch:css": "tailwindcss -c ./tailwind.config.cjs -i ./public/styles.src.css -o ./public/styles.css --watch",
     "prestart": "npm run build:css",
     "start": "PORT=4173 node server.js",
