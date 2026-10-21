@@ -9,25 +9,28 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="/vendor/apexcharts/apexcharts.css" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="icon"
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%97%3C/text%3E%3C/svg%3E" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 
 <body>
   <header class="topbar">
     <div class="brand">
-      <div class="brand-mark">TP</div>
+      <img class="brand-logo" src="/assets/por-todos-elas-logo.png" alt="Por Todas Elas">
       <div class="brand-text">
         <h1 id="projectTitle">TodosPorElas</h1>
-        <p id="projectSubtitle">Cadastro de Usuários · Juntos Pelo Acre</p>
+        <p id="projectSubtitle">Cadastro de Usuários</p>
       </div>
     </div>
 
     <div class="topbar-actions">
       <button class="theme-toggle" id="themeToggle" title="Alternar tema claro/escuro">
-        <span id="themeIcon">🌙</span>
+        <span id="themeIcon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg></span>
         <span id="themeText">Escuro</span>
       </button>
       <div class="live" id="liveBadge" title="Status da conexão em tempo real">
@@ -41,6 +44,10 @@
       <a class="btn" href="/api/export.csv" id="btnExport">Exportar CSV</a>
       <a class="btn" href="/api/export.resumo.csv" id="btnExportResumo">Resumo por município</a>
       <button class="btn btn-primary" id="btnRefresh">Atualizar agora</button>
+      <button class="btn" id="btnVisibilidade" title="Selecionar seções visíveis">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        <span>Seções</span>
+      </button>
     </div>
   </header>
 
@@ -52,7 +59,7 @@
   <main>
     <!-- Filtros globais -->
     <section class="filtros" id="filtros">
-      <h2 class="filtro-titulo">Filtros</h2>
+      <h2 class="filtro-titulo">Filtros </h2>
       <div class="filtro-linha">
         <div class="filtro-item">
           <label>Período</label>
@@ -74,78 +81,121 @@
       <div class="chips" id="chips"></div>
     </section>
 
-    <!-- KPIs -->
-    <section class="kpis" id="kpis">
-      <article class="kpi kpi-roxo">
-        <div class="kpi-icone">👥</div>
-        <div class="kpi-dados">
-          <span class="kpi-label">Cadastros totais</span>
-          <strong class="kpi-valor" id="kpiTotal">0</strong>
-          <span class="kpi-sub" id="kpiTotalSub">aguardando respostas</span>
-        </div>
-      </article>
-      <article class="kpi kpi-verde">
-        <div class="kpi-icone">🆕</div>
-        <div class="kpi-dados">
-          <span class="kpi-label">Novos (7 dias)</span>
-          <strong class="kpi-valor" id="kpiNovos7d">0</strong>
-          <span class="kpi-sub" id="kpiNovos7dSub">crescimento vs. semana anterior</span>
-        </div>
-      </article>
-      <article class="kpi kpi-roxo">
-        <div class="kpi-icone">📍</div>
-        <div class="kpi-dados">
-          <span class="kpi-label">Municípios alcançados</span>
-          <strong class="kpi-valor" id="kpiMunicipios">0</strong>
-          <span class="kpi-sub" id="kpiMunicipiosSub">de 22 municípios do Acre</span>
-        </div>
-      </article>
-      <article class="kpi kpi-laranja">
-        <div class="kpi-icone">💰</div>
-        <div class="kpi-dados">
-          <span class="kpi-label">Renda ≤ 1 SM</span>
-          <strong class="kpi-valor" id="kpiRendaBaixa">0</strong>
-          <span class="kpi-sub" id="kpiRendaBaixaSub">% dos cadastros com renda baixa</span>
-        </div>
-      </article>
-      <article class="kpi kpi-verde">
-        <div class="kpi-icone">🏥</div>
-        <div class="kpi-dados">
-          <span class="kpi-label">Com serviço acessado</span>
-          <strong class="kpi-valor" id="kpiServicos">0</strong>
-          <span class="kpi-sub" id="kpiServicosSub">% da população atendida</span>
-        </div>
-      </article>
-      <article class="kpi kpi-roxo">
-        <div class="kpi-icone">📋</div>
-        <div class="kpi-dados">
-          <span class="kpi-label">Completude média</span>
-          <strong class="kpi-valor" id="kpiCompletude">0</strong>
-          <span class="kpi-sub" id="kpiCompletudeSub">% dos campos preenchidos por cadastro</span>
-        </div>
-      </article>
-      <article class="kpi kpi-rosa">
-        <div class="kpi-icone">⚠️</div>
-        <div class="kpi-dados">
-          <span class="kpi-label">Possíveis duplicidades</span>
-          <strong class="kpi-valor" id="kpiDup">0</strong>
-          <span class="kpi-sub" id="kpiDupSub">CPF ou RG repetidos</span>
-        </div>
-      </article>
+    <!-- Painel 1 — KPIs -->
+    <section class="section" id="sec-visao-geral">
+      <h2 class="section-title">Painel 1 — Visão geral</h2>
+      <div class="kpis" id="kpis">
+        <article class="kpi kpi-roxo">
+          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg></div>
+          <div class="kpi-dados">
+            <span class="kpi-label">Cadastros totais</span>
+            <strong class="kpi-valor" id="kpiTotal">0</strong>
+            <span class="kpi-sub" id="kpiTotalSub">aguardando respostas</span>
+          </div>
+        </article>
+        <article class="kpi kpi-verde">
+          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <line x1="19" y1="8" x2="19" y2="14" />
+              <line x1="22" y1="11" x2="16" y2="11" />
+            </svg></div>
+          <div class="kpi-dados">
+            <span class="kpi-label">Novos no período</span>
+            <strong class="kpi-valor" id="kpiNovos7d">0</strong>
+            <span class="kpi-sub" id="kpiNovos7dSub">novos cadastros</span>
+          </div>
+        </article>
+        <article class="kpi kpi-roxo">
+          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg></div>
+          <div class="kpi-dados">
+            <span class="kpi-label">Municípios alcançados</span>
+            <strong class="kpi-valor" id="kpiMunicipios">0</strong>
+            <span class="kpi-sub" id="kpiMunicipiosSub">de 22 municípios do Acre</span>
+          </div>
+        </article>
+        <article class="kpi kpi-laranja">
+          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 21h18" />
+              <path d="M5 21V7l7-4 7 4v14" />
+              <path d="M9 21v-6h6v6" />
+            </svg></div>
+          <div class="kpi-dados">
+            <span class="kpi-label">Zona urbana</span>
+            <strong class="kpi-valor" id="kpiUrbana">0</strong>
+            <span class="kpi-sub" id="kpiUrbanaSub">% urbana</span>
+          </div>
+        </article>
+        <article class="kpi kpi-verde">
+          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="9" cy="7" r="3" />
+              <path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2" />
+              <path d="M17 8a2 2 0 1 1 2 2" />
+              <path d="M21 21v-1.5a4 4 0 0 0-2-3.46" />
+            </svg></div>
+          <div class="kpi-dados">
+            <span class="kpi-label">Com filhos</span>
+            <strong class="kpi-valor" id="kpiFilhos">0</strong>
+            <span class="kpi-sub" id="kpiFilhosSub">% dos cadastros</span>
+          </div>
+        </article>
+        <article class="kpi kpi-rosa">
+          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="4" r="2" />
+              <path d="M12 6v8" />
+              <path d="M8 10h8" />
+              <path d="m9 21 3-7 3 7" />
+            </svg></div>
+          <div class="kpi-dados">
+            <span class="kpi-label">Deficiência na família</span>
+            <strong class="kpi-valor" id="kpiDeficiencia">0</strong>
+            <span class="kpi-sub" id="kpiDeficienciaSub">% dos cadastros</span>
+          </div>
+        </article>
+        <article class="kpi kpi-laranja">
+          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m12 2 9 5-9 5-9-5 9-5Z" />
+              <path d="m3 12 9 5 9-5" />
+              <path d="m3 17 9 5 9-5" />
+            </svg></div>
+          <div class="kpi-dados">
+            <span class="kpi-label">Serviços por pessoa</span>
+            <strong class="kpi-valor" id="kpiMediaServicos">0</strong>
+            <span class="kpi-sub" id="kpiMediaServicosSub">média solicitada por cadastro</span>
+          </div>
+        </article>
+      </div>
     </section>
 
     <!-- Evolução -->
-    <section class="section">
+    <section class="section" id="sec-evolucao">
       <h2 class="section-title">Evolução do cadastro</h2>
       <div class="grid">
         <article class="card card-wide">
-          <div class="chart-box tall"><canvas id="chartEvolucao"></canvas></div>
+          <div class="chart-box tall">
+            <div class="chart" id="chartEvolucao"></div>
+          </div>
         </article>
       </div>
     </section>
 
     <!-- Mapa + cobertura municipal -->
-    <section class="section">
+    <section class="section" id="sec-cobertura">
       <h2 class="section-title">Cobertura territorial — Municípios do Acre</h2>
       <div class="grid">
         <article class="card card-wide">
@@ -162,6 +212,7 @@
         <article class="card card-wide">
           <div class="table-head">
             <h3 style="margin:0">Municípios — ranking</h3>
+            <button class="btn btn-sm" id="btnLimparCobertura" hidden>Limpar filtro</button>
           </div>
           <div class="table-scroll" style="max-height:360px;overflow:auto">
             <table id="tabelaMunicipio">
@@ -184,128 +235,248 @@
       </p>
     </section>
 
-    <!-- Demografia -->
-    <section class="section">
-      <h2 class="section-title">Perfil demográfico</h2>
+    <!-- Painel 2 — Perfil social -->
+    <section class="section" id="sec-perfil-social">
+      <h2 class="section-title">Painel 2 — Perfil social e familiar</h2>
       <div class="grid">
         <article class="card">
-          <div class="chart-box"><canvas id="chartGenero"></canvas></div>
+          <h3>Faixa etária</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartIdade"></div>
+          </div>
         </article>
         <article class="card">
-          <div class="chart-box"><canvas id="chartZona"></canvas></div>
+          <h3>Identidade de gênero</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartGenero"></div>
+          </div>
         </article>
         <article class="card">
-          <div class="chart-box"><canvas id="chartRaca"></canvas></div>
+          <h3>Orientação sexual</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartOrientacao"></div>
+          </div>
         </article>
         <article class="card">
-          <div class="chart-box"><canvas id="chartOrientacao"></canvas></div>
+          <h3>Raça/cor/etnia</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartRaca"></div>
+          </div>
         </article>
         <article class="card">
-          <div class="chart-box"><canvas id="chartIdade"></canvas></div>
+          <h3>Zona de residência</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartZona"></div>
+          </div>
         </article>
         <article class="card card-wide">
-          <div class="chart-box"><canvas id="chartUfNascimento"></canvas></div>
+          <h3>Cidade de residência</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartCidade"></div>
+          </div>
+        </article>
+        <article class="card">
+          <h3>Possui filhos</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartFilhosSimNao"></div>
+          </div>
+        </article>
+        <article class="card">
+          <h3>Quantidade de filhos</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartFilhosDist"></div>
+          </div>
+        </article>
+        <article class="card">
+          <h3>Deficiência na família</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartDeficiencia"></div>
+          </div>
         </article>
         <article class="card card-wide">
-          <div class="chart-box"><canvas id="chartCidadeNascimento"></canvas></div>
-        </article>
-        <article class="card card-wide">
-          <div class="chart-box"><canvas id="chartNacionalidade"></canvas></div>
+          <h3>Tipo de deficiência</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartTipoDeficiencia"></div>
+          </div>
         </article>
       </div>
     </section>
 
-    <!-- Socioeconômico -->
-    <section class="section">
-      <h2 class="section-title">Situação socioeconômica e trabalho</h2>
+    <!-- Painel 3 — Vulnerabilidade -->
+    <section class="section" id="sec-vulnerabilidade">
+      <h2 class="section-title">Painel 3 — Vulnerabilidade socioeconômica</h2>
       <div class="grid">
+        <article class="card">
+          <h3>Renda familiar per capita</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartRenda"></div>
+          </div>
+        </article>
+        <article class="card">
+          <h3>Trabalha atualmente</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartTrabalha"></div>
+          </div>
+        </article>
+        <article class="card">
+          <h3>Tipo de vínculo</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartVinculo"></div>
+          </div>
+        </article>
+        <article class="card">
+          <h3>Recebe auxílio financeiro</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartAuxilio"></div>
+          </div>
+        </article>
         <article class="card card-wide">
-          <div class="chart-box"><canvas id="chartRendaXzona"></canvas></div>
+          <h3>Tipos de auxílio recebidos</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartTipoBeneficio"></div>
+          </div>
         </article>
         <article class="card">
-          <div class="chart-box"><canvas id="chartVinculo"></canvas></div>
+          <h3>Acompanhamento CRAS/CREAS</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartAcompanhamento"></div>
+          </div>
         </article>
-        <article class="card">
-          <div class="chart-box"><canvas id="chartFilhosSimNao"></canvas></div>
+        <article class="card card-wide">
+          <h3>Renda por zona de residência</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartRendaXzona"></div>
+          </div>
         </article>
-        <article class="card">
-          <div class="chart-box"><canvas id="chartFilhosDist"></canvas></div>
+        <article class="card card-wide">
+          <h3>Trabalho por faixa de renda</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartTrabalhaXrenda"></div>
+          </div>
+        </article>
+        <article class="card card-wide">
+          <h3>Raça/cor por faixa de renda</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartRacaXrenda"></div>
+          </div>
         </article>
       </div>
     </section>
 
-    <!-- Benefícios / vulnerabilidade -->
-    <section class="section">
-      <h2 class="section-title">Benefícios, migrância e deficiência</h2>
-      <div class="grid">
-        <article class="card">
-          <div class="chart-box"><canvas id="chartBeneficio"></canvas></div>
-        </article>
-        <article class="card card-wide">
-          <div class="chart-box"><canvas id="chartTipoBeneficio"></canvas></div>
-        </article>
-        <article class="card">
-          <div class="chart-box"><canvas id="chartDeficiencia"></canvas></div>
-        </article>
-        <article class="card card-wide">
-          <div class="chart-box"><canvas id="chartTipoDeficiencia"></canvas></div>
-        </article>
-        <article class="card">
-          <div class="chart-box"><canvas id="chartMigrante"></canvas></div>
-        </article>
-      </div>
-    </section>
-
-    <!-- Educação -->
-    <section class="section">
-      <h2 class="section-title">Educação</h2>
-      <div class="grid">
-        <article class="card">
-          <div class="chart-box"><canvas id="chartNivel"></canvas></div>
-        </article>
-        <article class="card">
-          <div class="chart-box"><canvas id="chartCursoSuperior"></canvas></div>
-        </article>
-        <article class="card">
-          <div class="chart-box"><canvas id="chartTurno"></canvas></div>
-        </article>
-        <article class="card">
-          <div class="chart-box"><canvas id="chartSemestre"></canvas></div>
-        </article>
-        <article class="card card-wide">
-          <div class="chart-box"><canvas id="chartIngresso"></canvas></div>
-        </article>
-      </div>
-    </section>
-
-    <!-- Serviços do programa -->
-    <section class="section">
-      <h2 class="section-title">Serviços do Programa Juntos Pelo Acre</h2>
+    <!-- Painel 4 — Demanda por serviços -->
+    <section class="section" id="sec-demanda-servicos">
+      <h2 class="section-title">Painel 4 — Demanda por serviços</h2>
       <div class="grid">
         <article class="card card-wide">
-          <div class="chart-box tall"><canvas id="chartServicos"></canvas></div>
+          <h3>Serviços mais procurados</h3>
+          <div class="chart-box tall">
+            <div class="chart" id="chartServicos"></div>
+          </div>
         </article>
         <article class="card card-wide">
-          <div class="chart-box"><canvas id="chartHistServicos"></canvas></div>
+          <h3>Demanda por área</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartAreas"></div>
+          </div>
+        </article>
+        <article class="card card-wide">
+          <h3>Demanda por município</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartDemandaCidade"></div>
+          </div>
+        </article>
+        <article class="card card-wide">
+          <h3>Evolução mensal dos serviços</h3>
+          <div class="chart-box tall">
+            <div class="chart" id="chartServicosMes"></div>
+          </div>
+        </article>
+        <article class="card card-wide">
+          <h3>Renda x serviços procurados</h3>
+          <div class="chart-box tall">
+            <div class="chart" id="chartRendaXservicos"></div>
+          </div>
+        </article>
+        <article class="card card-wide">
+          <h3>Zona de residência x serviços</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartZonaXservicos"></div>
+          </div>
+        </article>
+        <article class="card card-wide">
+          <h3>Faixa etária x serviços de saúde</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartIdadeXsaude"></div>
+          </div>
+        </article>
+        <article class="card card-wide">
+          <h3>CRAS/CREAS x serviços</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartCrasXservicos"></div>
+          </div>
+        </article>
+        <article class="card card-wide">
+          <h3>Raça/cor x serviços</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartRacaXservicos"></div>
+          </div>
+        </article>
+        <article class="card card-wide">
+          <h3>Serviços por pessoa</h3>
+          <div class="chart-box">
+            <div class="chart" id="chartHistServicos"></div>
+          </div>
         </article>
       </div>
     </section>
 
     <!-- Qualidade da coleta -->
-    <section class="section">
+    <section class="section" id="sec-qualidade">
       <h2 class="section-title">Qualidade da coleta</h2>
+      <div class="kpis" style="margin-bottom:16px">
+        <article class="kpi kpi-roxo">
+          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="8" y="2" width="8" height="4" rx="1" />
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <path d="m9 14 2 2 4-4" />
+            </svg></div>
+          <div class="kpi-dados">
+            <span class="kpi-label">Completude média</span>
+            <strong class="kpi-valor" id="kpiCompletude">0</strong>
+            <span class="kpi-sub" id="kpiCompletudeSub">% dos campos preenchidos por cadastro</span>
+          </div>
+        </article>
+        <article class="kpi kpi-rosa">
+          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg></div>
+          <div class="kpi-dados">
+            <span class="kpi-label">Possíveis duplicidades</span>
+            <strong class="kpi-valor" id="kpiDup">0</strong>
+            <span class="kpi-sub" id="kpiDupSub">CPF ou RG repetidos</span>
+          </div>
+        </article>
+      </div>
       <div class="grid">
         <article class="card card-wide">
-          <div class="chart-box tall"><canvas id="chartRespostaCampo"></canvas></div>
+          <div class="chart-box tall">
+            <div class="chart" id="chartRespostaCampo"></div>
+          </div>
         </article>
         <article class="card">
-          <div class="chart-box"><canvas id="chartCompletude"></canvas></div>
+          <div class="chart-box">
+            <div class="chart" id="chartCompletude"></div>
+          </div>
         </article>
       </div>
     </section>
 
     <!-- Registros -->
-    <section class="section">
+    <section class="section" id="sec-cadastros-recentes">
       <div class="table-head">
         <h2 class="section-title">Cadastros recentes</h2>
         <div class="table-tools">
@@ -342,14 +513,33 @@
     </section>
 
     <footer class="footer">
-      <span id="footerInfo">Dados via KoboToolbox API</span>
+      <span class="footer-brand">SEMULHER — Secretaria da Mulher</span>
       <a id="footerForm" href="#" target="_blank" rel="noopener">Abrir formulário ↗</a>
     </footer>
   </main>
 
   <div class="toast" id="toast" hidden></div>
 
+  <div class="modal" id="modalSecoes" hidden aria-labelledby="modalSecoesTitulo" role="dialog">
+    <div class="modal-backdrop" id="modalSecoesBackdrop"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h3 id="modalSecoesTitulo">Seções visíveis</h3>
+        <button class="btn-close" id="modalSecoesFechar" aria-label="Fechar">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-hint">Marque as seções que deseja exibir no dashboard.</p>
+        <div class="secao-lista" id="secaoLista"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="modalSecoesReset">Restaurar padrão</button>
+        <button class="btn btn-primary" id="modalSecoesAplicar">Aplicar</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/vendor/apexcharts/apexcharts.min.js"></script>
   <script src="/app.js"></script>
 </body>
 

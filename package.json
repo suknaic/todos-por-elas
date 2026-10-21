@@ -5,14 +5,22 @@
   "description": "Dashboard em tempo real do formulario KoboToolbox TodosPorElas",
   "type": "module",
   "scripts": {
+    "build:css": "tailwindcss -c ./tailwind.config.cjs -i ./public/styles.src.css -o ./public/styles.css",
+    "watch:css": "tailwindcss -c ./tailwind.config.cjs -i ./public/styles.src.css -o ./public/styles.css --watch",
+    "prestart": "npm run build:css",
     "start": "PORT=4173 node server.js",
+    "predev": "npm run build:css",
     "dev": "PORT=4173 node --watch server.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
+    "apexcharts": "^8.4.1",
     "leaflet": "^1.9.4",
     "localtunnel": "^2.0.2"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
   }
 }

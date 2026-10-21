@@ -9,7 +9,8 @@ import {
   fetchIncremental,
   loadGeoJSON
 } from './lib/kobo.js';
-import { computeAggregates } from './lib/aggregate.js';
+import { computeAggregates, cityName, getValue } from './lib/aggregate.js';
+import { resolveField } from './lib/normalize.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -64,17 +65,9 @@ const state = {
   lastUpdated: null,
   error: null,
   geoJSON: null,
+  syncing: false,
   clients: new Set()
 };
-
-async function koboGet(url) {
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json' },
-    signal: AbortSignal.timeout(20000)
-  });
-  if (!res.ok) throw new Error(`Kobo API ${res.status} em ${url}`);
-  return res.json();
-}
 
 function makeSignature(rows) {
   if (!rows.length) return 'empty';
@@ -95,129 +88,20 @@ function broadcast(type, payload) {
   }
 }
 
-function pick(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-const firstNames = ['Ana', 'Maria', 'Juliana', 'Beatriz', 'Camila', 'Fernanda', 'Larissa', 'Aline', 'Rafaela', 'Sandra', 'Josefa', 'Mariana', 'Patrícia', 'Tainá', 'Vanessa', 'Cristiane', 'Adriana', 'Simone'];
-const lastNames = ['Silva', 'Santos', 'Oliveira', 'Souza', 'Lima', 'Pereira', 'Costa', 'Almeida', 'Ribeiro', 'Ferreira', 'Carvalho', 'Gomes', 'Martins'];
-
-function pickList(listName) {
-  const items = state.choices[listName] || [];
-  if (!items.length) return '';
-  const item = pick(items);
-  return item.value ?? item.name;
-}
-
-const simNao = (p = 0.5) => (Math.random() < p ? 'sim' : 'n_o');
-
-function makeDemoRow(i) {
-  const estrangeiro = Math.random() < 0.12;
-  const trabalha = simNao();
-  const possuiFilhos = simNao(0.65);
-  const recebeAuxilio = simNao(0.6);
-  const deficiencia = simNao(0.25);
-  const migrante = simNao(0.3);
-  const servicos = (state.choices.zx7ud82 || [])
-    .filter(() => Math.random() < 0.4)
-    .map((c) => c.value ?? c.name);
-  const idade = 16 + Math.floor(Math.random() * 45);
-  const nivel = pickList('ex68a42');
-  return {
-    _id: `demo-${i}-${Date.now()}`,
-    _uuid: `demo-uuid-${i}-${Date.now()}`,
-    _submission_time: new Date(Date.now() - Math.floor(Math.random() * 25) * 86400000).toISOString(),
-    Nome_do_usu_rio: `${pick(firstNames)} ${pick(lastNames)}`,
-    RG: String(100000000 + Math.floor(Math.random() * 899999999)),
-    CPF: String(10000000000 + Math.floor(Math.random() * 89999999999)),
-    Idade: String(idade),
-    Nacionalidade: estrangeiro ? 'estrangeiro' : 'brasileiro',
-    Se_for_estrangeiro_qual_a_nacionalidade: estrangeiro ? 'Bolívia' : '',
-    Telefone: `(68) 9${Math.floor(1000 + Math.random() * 8999)}-${Math.floor(1000 + Math.random() * 8999)}`,
-    Cidade_de_Nascimento: pick(['Rio Branco', 'Cruzeiro do Sul', 'Tarauacá', 'Brasília']),
-    Cidade_da_resid_ncia_atual: pickList('wb2gy08'),
-    Estado_de_Nasimento: pickList('wi2ra14'),
-    Endere_o: `Rua ${pick(lastNames)}, ${Math.floor(1 + Math.random() * 999)}`,
-    Zona: pickList('ml1hg11'),
-    Possui_Filhos: possuiFilhos,
-    Se_sim_quantos: possuiFilhos === 'sim' ? String(1 + Math.floor(Math.random() * 4)) : '',
-    Identidade_de_G_nero: pickList('xv1wh54'),
-    Orienta_o_Sexual: pickList('ma9np89'),
-    Quem_o_respons_vel_to_do_grupo_familiar: pick(firstNames),
-    Trabalha: trabalha,
-    Se_sim_qual_o_v_nculo: trabalha === 'sim' ? pickList('ge5pp48') : '',
-    Renda_Familiar_per_capita: pickList('bi8dg53'),
-    Voc_ou_algu_m_da_sua_fam_lia_: recebeAuxilio,
-    Se_sim_qual: recebeAuxilio === 'sim' ? pickList('pn64m63') : '',
-    Migrante: migrante,
-    Se_sim_Localidade: migrante === 'sim' ? pick(['Cruzeiro do Sul', 'Tabatinga', 'Guajará-Mirim']) : '',
-    Cidade: migrante === 'sim' ? pick(['Cruzeiro do Sul', 'Tabatinga']) : '',
-    Estado: migrante === 'sim' ? pick(['AC', 'AM', 'RO']) : '',
-    H_quanto_tempo: migrante === 'sim' ? String(1 + Math.floor(Math.random() * 10)) : '',
-    Voc_ou_algu_m_da_fam_lia_poss: deficiencia,
-    Se_sim_qual_001: deficiencia === 'sim' ? pickList('er71y45') : '',
-    Ra_a_Cor_Etnia: pickList('ch7hy55'),
-    Naturalidade: pick(['Rio Branco', 'Cruzeiro do Sul', 'Tarauacá']),
-    N_vel: nivel,
-    Se_superior_qual: nivel === 'superior' ? pickList('cb1tv98') : '',
-    Ano_de_Ingresso: String(2021 + Math.floor(Math.random() * 5)),
-    Turno: pickList('si8wk37'),
-    Semestre: pickList('rz1op81'),
-    _acompanhado_pelo: pickList('zi7jh00'),
-    Quais_servi_os_acess_ama_Juntos_Pelo_Acre: servicos.join(' ')
-  };
-}
-
-let demoSeq = 0;
-function seedDemoDataAppend() {
-  const row = makeDemoRow(demoSeq++);
-  row._submission_time = new Date().toISOString();
-  state.data.unshift(row);
-  if (state.data.length > 5000) state.data.length = 5000;
-  state.signature = makeSignature(state.data);
-  state.version++;
-  state.count = state.data.length;
-  state.lastUpdated = new Date().toISOString();
-  broadcast('stats', {
-    count: state.data.length,
-    added: 1,
-    lastUpdated: state.lastUpdated,
-    version: state.version
-  });
-}
-
-function seedDemoData(n = 48) {
-  const rows = [];
-  for (let i = 0; i < n; i++) rows.push(makeDemoRow(i));
-  rows.sort((a, b) => new Date(b._submission_time) - new Date(a._submission_time));
-  demoSeq = n;
-  state.data = rows;
-  state.signature = makeSignature(rows);
-  state.version++;
-  state.count = rows.length;
-  state.lastUpdated = new Date().toISOString();
-  broadcast('stats', { count: rows.length, added: rows.length, lastUpdated: state.lastUpdated, version: state.version });
-}
-
 async function syncFromKobo() {
-  const demo = process.env.DEMO === '1' || process.env.DEMO === 'true';
-  if (demo) {
-    state.signature = makeSignature(state.data);
-    state.count = state.data.length;
-    state.lastUpdated = new Date().toISOString();
-    return { changed: false, count: state.data.length };
-  }
   const { results, count, lastId, changed } = await fetchIncremental(state.storeMaxId);
   if (!changed || !results.length) {
     state.count = count || state.data.length;
+    state.error = null;
     state.lastUpdated = new Date().toISOString();
     return { changed: false, count: state.count };
   }
-  state.data = results.concat(state.data).slice(0, 5000);
+  state.data = results.concat(state.data).slice(0, CONFIG.maxRecords);
   state.storeMaxId = lastId;
   state.signature = makeSignature(state.data);
   state.version++;
   state.count = count;
+  state.error = null;
   state.lastUpdated = new Date().toISOString();
   broadcast('stats', {
     count,
@@ -229,6 +113,8 @@ async function syncFromKobo() {
 }
 
 async function pollOnce({ silent = false } = {}) {
+  if (state.syncing) return { changed: false, count: state.count, skipped: true };
+  state.syncing = true;
   try {
     const r = await syncFromKobo();
     if (r.changed && !silent) broadcast('data', { count: r.count, added: r.added, lastUpdated: state.lastUpdated });
@@ -236,8 +122,10 @@ async function pollOnce({ silent = false } = {}) {
   } catch (err) {
     state.error = err.message;
     state.lastUpdated = new Date().toISOString();
-    if (!silent) broadcast('error', { message: err.message, lastUpdated: state.lastUpdated });
+    if (!silent) broadcast('sync-error', { message: err.message, lastUpdated: state.lastUpdated });
     return { changed: false, count: state.count, error: err.message };
+  } finally {
+    state.syncing = false;
   }
 }
 
@@ -275,7 +163,7 @@ function handleStream(req, res) {
     'X-Accel-Buffering': 'no'
   });
   res.write(`event: hello\ndata: ${JSON.stringify({ count: state.count, lastUpdated: state.lastUpdated, version: state.version })}\n\n`);
-  res.write(`event: stats\ndata: ${JSON.stringify({ count: state.count, lastUpdated: state.lastUpdated, version: state.version, demo: process.env.DEMO === '1' })}\n\n`);
+  res.write(`event: stats\ndata: ${JSON.stringify({ count: state.count, lastUpdated: state.lastUpdated, version: state.version })}\n\n`);
 
   state.clients.add(res);
   const ping = setInterval(() => {
@@ -337,8 +225,7 @@ function handleAggregate(req, res) {
   json(res, 200, {
     ...agg,
     version: state.version,
-    lastUpdated: state.lastUpdated,
-    demo: process.env.DEMO === '1'
+    lastUpdated: state.lastUpdated
   });
 }
 
@@ -349,16 +236,13 @@ function handleSubmissions(req, res) {
   const city = url.searchParams.get('city') || undefined;
   const q = url.searchParams.get('q') || undefined;
   const days = url.searchParams.get('days') || undefined;
-  const sortKey = url.searchParams.get('sort') || 'submitted_at';
+  const rawSortKey = url.searchParams.get('sort') || 'submitted_at';
   const sortDir = url.searchParams.get('dir') || 'desc';
 
   let rows = state.data.slice();
   if (city) {
-    const fCidade = state.fields.find((f) => f.list === 'wb2gy08' || f.name === 'Cidade_da_resid_ncia_atual');
-    rows = rows.filter((r) => {
-      const v = r[fCidade.xpath] ?? r[fCidade.name] ?? '';
-      return String(v) === city;
-    });
+    const fCidade = resolveField(state.fields, 'Cidade da residência atual', 'wb2gy08');
+    rows = rows.filter((r) => cityName(getValue(r, fCidade, state.choices)) === city);
   }
   if (q) {
     const nq = q.toLowerCase();
@@ -372,11 +256,27 @@ function handleSubmissions(req, res) {
     rows = rows.filter((r) => new Date(r.submitted_at || r._submission_time || r.start) >= since);
   }
   const total = rows.length;
+  const SORT_KEYS = {
+    nome: 'Nome_do_usu_rio',
+    idade: 'Idade',
+    cidade: 'Cidade_da_resid_ncia_atual',
+    zona: 'Zona',
+    genero: 'Identidade_de_G_nero',
+    trabalha: 'Trabalha',
+    renda: 'Renda_Familiar_per_capita',
+    servicos: '__service_count',
+    cpf: 'CPF',
+    envio: '_submission_time',
+    submitted_at: '_submission_time'
+  };
+  const sortKey = SORT_KEYS[rawSortKey] || rawSortKey;
   rows.sort((a, b) => {
-    const av = a[sortKey] || a._submission_time || '';
-    const bv = b[sortKey] || b._submission_time || '';
+    let av = a[sortKey] ?? '';
+    let bv = b[sortKey] ?? '';
+    const an = Number(av), bn = Number(bv);
     let cmp = 0;
-    if (av < bv) cmp = -1;
+    if (av !== '' && bv !== '' && !Number.isNaN(an) && !Number.isNaN(bn)) cmp = an - bn;
+    else if (av < bv) cmp = -1;
     else if (av > bv) cmp = 1;
     return sortDir === 'asc' ? cmp : -cmp;
   });
@@ -387,7 +287,6 @@ function handleSubmissions(req, res) {
     rows: slice.map((r) => ({
       ...r,
       __cpf: r.CPF ? '***' : null,
-      __rg: r.RG ? '***' : null,
       __envio: r._submission_time || r.received_at || ''
     })),
     total,
@@ -403,7 +302,6 @@ function handleMeta(req, res) {
     count: state.count,
     lastUpdated: state.lastUpdated,
     version: state.version,
-    demo: process.env.DEMO === '1',
     clients: state.clients.size,
     error: state.error,
     pollIntervalMs: CONFIG.pollIntervalMs,
@@ -492,22 +390,15 @@ async function init() {
     console.warn('[geo] falha ao carregar acre-municipios.geojson:', err.message);
   }
 
-  const demoEnv = process.env.DEMO === '1' || process.env.DEMO === 'true';
-  if (demoEnv) {
-    seedDemoData(Number(process.env.DEMO_ROWS || 48));
-    console.log(`[demo] ${state.count} registros de demonstração injetados`);
-  } else {
-    await pollOnce({ silent: true });
-  }
-
-  setInterval(() => pollOnce(), CONFIG.pollIntervalMs);
-  setInterval(() => koboFetchSchema().catch(() => {}), 5 * 60 * 1000);
-
   server.listen(CONFIG.port, () => {
     console.log(`Dashboard em http://localhost:${CONFIG.port}`);
     console.log(`Projeto: ${CONFIG.assetUid} | Poll: ${CONFIG.pollIntervalMs / 1000}s | Registros: ${state.count}`);
     if (requireAuth) console.log('[auth] Basic auth ativo');
   });
+
+  pollOnce({ silent: true }).catch(() => {});
+  setInterval(() => pollOnce(), CONFIG.pollIntervalMs);
+  setInterval(() => koboFetchSchema().catch(() => {}), 5 * 60 * 1000);
 }
 
 process.on('SIGTERM', () => server.close());
