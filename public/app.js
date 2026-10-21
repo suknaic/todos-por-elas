@@ -904,9 +904,6 @@ function bind() {
   $('prevPage').addEventListener('click', () => { app.page--; loadSubmissions(); });
   $('nextPage').addEventListener('click', () => { app.page++; loadSubmissions(); });
 
-  setInterval(() => {
-    $('lastUpdated').textContent = fmtTime($('lastUpdated').dataset.iso || null);
-  }, 20000);
 }
 
 async function loadSchema() {

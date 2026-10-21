@@ -62,7 +62,6 @@ const state = {
   storeMaxId: null,
   version: 0,
   count: 0,
-  lastUpdated: null,
   error: null,
   geoJSON: null,
   syncing: false,
@@ -93,7 +92,6 @@ async function syncFromKobo() {
   if (!changed || !results.length) {
     state.count = count || state.data.length;
     state.error = null;
-    state.lastUpdated = new Date().toISOString();
     return { changed: false, count: state.count };
   }
   state.data = results.concat(state.data).slice(0, CONFIG.maxRecords);
@@ -102,11 +100,9 @@ async function syncFromKobo() {
   state.version++;
   state.count = count;
   state.error = null;
-  state.lastUpdated = new Date().toISOString();
   broadcast('stats', {
     count,
     added: results.length,
-    lastUpdated: state.lastUpdated,
     version: state.version
   });
   return { changed: true, count, added: results.length };
@@ -117,12 +113,11 @@ async function pollOnce({ silent = false } = {}) {
   state.syncing = true;
   try {
     const r = await syncFromKobo();
-    if (r.changed && !silent) broadcast('data', { count: r.count, added: r.added, lastUpdated: state.lastUpdated });
+    if (r.changed && !silent) broadcast('data', { count: r.count, added: r.added });
     return r;
   } catch (err) {
     state.error = err.message;
-    state.lastUpdated = new Date().toISOString();
-    if (!silent) broadcast('sync-error', { message: err.message, lastUpdated: state.lastUpdated });
+    if (!silent) broadcast('sync-error', { message: err.message });
     return { changed: false, count: state.count, error: err.message };
   } finally {
     state.syncing = false;
@@ -162,8 +157,8 @@ function handleStream(req, res) {
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no'
   });
-  res.write(`event: hello\ndata: ${JSON.stringify({ count: state.count, lastUpdated: state.lastUpdated, version: state.version })}\n\n`);
-  res.write(`event: stats\ndata: ${JSON.stringify({ count: state.count, lastUpdated: state.lastUpdated, version: state.version })}\n\n`);
+  res.write(`event: hello\ndata: ${JSON.stringify({ count: state.count, version: state.version })}\n\n`);
+  res.write(`event: stats\ndata: ${JSON.stringify({ count: state.count, version: state.version })}\n\n`);
 
   state.clients.add(res);
   const ping = setInterval(() => {
@@ -224,8 +219,7 @@ function handleAggregate(req, res) {
   const agg = computeAggregates(state.data, { fields: state.fields, choices: state.choices }, state.geoJSON, { city, days });
   json(res, 200, {
     ...agg,
-    version: state.version,
-    lastUpdated: state.lastUpdated
+    version: state.version
   });
 }
 
@@ -300,7 +294,6 @@ function handleMeta(req, res) {
   json(res, 200, {
     ok: true,
     count: state.count,
-    lastUpdated: state.lastUpdated,
     version: state.version,
     clients: state.clients.size,
     error: state.error,
@@ -322,7 +315,6 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/data') {
     return json(res, 200, {
       count: state.count,
-      lastUpdated: state.lastUpdated,
       error: state.error,
       pollIntervalMs: CONFIG.pollIntervalMs,
       results: state.data
@@ -341,7 +333,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/refresh') {
     const r = await pollOnce();
-    return json(res, 200, { ok: true, ...r, count: state.count, lastUpdated: state.lastUpdated, version: state.version });
+    return json(res, 200, { ok: true, ...r, count: state.count, version: state.version });
   }
 
   if (pathname === '/api/aggregate') return handleAggregate(req, res);
