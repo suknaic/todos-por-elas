@@ -36,6 +36,11 @@ Em desenvolvimento local, salve essas variáveis em um arquivo `.env` na raiz
 do projeto. Os comandos `npm start` e `npm run dev` carregam esse arquivo
 automaticamente. Não versione o arquivo `.env`.
 
+Opcionalmente, defina `SESSION_SECRET` para assinar os cookies de sessão. Sem
+ela, a chave é derivada de `DASHBOARD_PASS`, e trocar a senha invalida todas as
+sessões. A sessão é um cookie assinado e sem estado, adequado a ambientes
+serverless como a Vercel.
+
 Com as duas variáveis configuradas, a página, as APIs, o stream em tempo real,
 os arquivos protegidos e as exportações exigem usuário e senha. A autenticação
 Basic Auth continua aceita para integrações e clientes que já a utilizam. Sem
