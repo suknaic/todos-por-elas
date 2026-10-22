@@ -1,23 +1,25 @@
 # Dashboard TodosPorElas
 
-## Configuração do Clerk
+## Autenticação
 
-Crie uma aplicação no Clerk e configure o domínio do dashboard como origem
-permitida. Desative o cadastro público (os usuários devem ser criados no painel
-do Clerk) e configure estas variáveis no ambiente local ou na Vercel:
+O dashboard exibe uma tela de login e mantém a autenticação em uma sessão por
+cookie HttpOnly. Configure as variáveis de ambiente no ambiente local ou na
+Vercel:
 
 ```env
-CLERK_PUBLISHABLE_KEY=pk_...
-CLERK_SECRET_KEY=sk_...
+DASHBOARD_USER=admin
+DASHBOARD_PASS=uma-senha-forte
 ```
 
-`CLERK_SECRET_KEY` fica somente no servidor. A chave pública é entregue ao
-navegador pelo endpoint de configuração usado pela tela de login.
+Em desenvolvimento local, salve essas variáveis em um arquivo `.env` na raiz
+do projeto. Os comandos `npm start` e `npm run dev` carregam esse arquivo
+automaticamente. Não versione o arquivo `.env`.
 
-Para manter a compatibilidade com instalações antigas, também é possível
-configurar `DASHBOARD_USER` e `DASHBOARD_PASS`; as APIs aceitam Basic Auth ou
-uma sessão Clerk válida. Sem nenhuma configuração de autenticação, as APIs
-respondem com erro de configuração em vez de ficarem públicas.
+Com as duas variáveis configuradas, a página, as APIs, o stream em tempo real,
+os arquivos protegidos e as exportações exigem usuário e senha. A autenticação
+Basic Auth continua aceita para integrações e clientes que já a utilizam. Sem
+essa configuração, o servidor responde com erro de autenticação em vez de
+deixar os dados públicos.
 
 ## Execução local
 

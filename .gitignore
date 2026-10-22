@@ -14,6 +14,7 @@ yarn.lock
 .env.*.local
 .env.development
 .env.production
+!.env.example
 
 # ---------------------------------------------------------------
 # Build / generated assets

@@ -11,7 +11,15 @@ import {
 } from './lib/kobo.js';
 import { computeAggregates, cityName, getValue } from './lib/aggregate.js';
 import { resolveField } from './lib/normalize.js';
-import { authChallenge, authenticateRequest, clerkConfig, isAuthConfigPath } from './lib/auth.js';
+import {
+  authChallenge,
+  authenticateRequest,
+  isLoginRequest,
+  isPublicPath,
+  loginRequest,
+  logoutRequest,
+  securityHeaders
+} from './lib/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -102,6 +110,7 @@ async function pollOnce({ silent = false } = {}) {
 function json(res, status, body) {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
+    ...securityHeaders(),
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'Content-Length': Buffer.byteLength(payload)
@@ -116,6 +125,7 @@ async function serveStatic(req, res, pathname) {
   try {
     const data = await fs.readFile(filePath);
     res.writeHead(200, {
+      ...securityHeaders(),
       'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream',
       'Cache-Control': 'no-cache'
     });
@@ -285,17 +295,24 @@ async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const { pathname } = url;
 
+  if (isLoginRequest(req)) return loginRequest(req, res);
+  if (req.method === 'POST' && pathname === '/api/logout') {
+    const auth = await authenticateRequest(req);
+    if (!auth.ok) return authChallenge(res, 401, 'Não autorizado');
+    return logoutRequest(req, res);
+  }
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return json(res, 405, { error: 'Método não permitido' });
   }
 
-  if (isAuthConfigPath(pathname)) {
-    return json(res, 200, { publishableKey: clerkConfig.publishableKey });
-  }
-
-  if (pathname.startsWith('/api/') && pathname !== '/health') {
+  const protectedPath = pathname !== '/health' && !isPublicPath(pathname);
+  if (protectedPath) {
     const auth = await authenticateRequest(req);
-    if (!auth.ok && auth.type !== 'basic') return authChallenge(res, auth.status, auth.message);
+    if (!auth.ok) {
+      if (pathname.startsWith('/api/')) return authChallenge(res, auth.status, auth.message);
+      res.writeHead(302, { ...securityHeaders(), Location: `/login?next=${encodeURIComponent(pathname)}` });
+      return res.end();
+    }
   }
 
   if (pathname === '/api/data') {
@@ -317,6 +334,7 @@ async function handleRequest(req, res) {
 
   if (pathname === '/api/stream') {
     res.writeHead(200, {
+      ...securityHeaders(),
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
@@ -435,7 +453,7 @@ async function handleRequest(req, res) {
   if (pathname === '/geo/acre-municipios.geojson') {
     try {
       const data = await fs.readFile(path.join(PUBLIC_DIR, 'geo', 'acre-municipios.geojson'));
-      res.writeHead(200, { 'Content-Type': 'application/geo+json', 'Cache-Control': 'public, max-age=86400' });
+      res.writeHead(200, { ...securityHeaders(), 'Content-Type': 'application/geo+json', 'Cache-Control': 'public, max-age=86400' });
       res.end(data);
     } catch {
       json(res, 404, { error: 'GeoJSON não encontrado' });
@@ -447,12 +465,12 @@ async function handleRequest(req, res) {
     return json(res, 200, { ok: true, clients: state.clients.size, count: state.count });
   }
 
-  const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const rel = pathname === '/login' ? 'login.html' : pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
   const filePath = path.join(PUBLIC_DIR, rel);
   if (!filePath.startsWith(PUBLIC_DIR)) return json(res, 403, { error: 'Proibido' });
   try {
     const data = await fs.readFile(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    res.writeHead(200, { ...securityHeaders(), 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(data);
   } catch {
     json(res, 404, { error: 'Não encontrado' });
@@ -480,8 +498,7 @@ async function init() {
   server.listen(CONFIG.port, () => {
     console.log(`Dashboard em http://localhost:${CONFIG.port}`);
     console.log(`Projeto: ${CONFIG.assetUid} | Poll: ${CONFIG.pollIntervalMs / 1000}s | Registros: ${state.count}`);
-    if (process.env.DASHBOARD_USER && process.env.DASHBOARD_PASS) console.log('[auth] Basic auth compatível ativo');
-    if (clerkConfig.configured) console.log('[auth] Clerk ativo');
+    if (process.env.DASHBOARD_USER && process.env.DASHBOARD_PASS) console.log('[auth] Basic auth ativo');
   });
 
   pollOnce({ silent: true }).catch(() => {});

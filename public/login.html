@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar — TodosPorElas</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    body { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--bg); }
+    .login-shell { width: min(100%, 420px); }
+    .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: 36px; box-shadow: var(--shadow-lg); }
+    .login-brand { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
+    .login-brand img { width: 64px; height: 64px; object-fit: contain; border-radius: 14px; }
+    .login-brand h1 { margin: 0; font-size: 20px; }
+    .login-brand p { margin: 3px 0 0; color: var(--text-soft); font-size: 13px; }
+    .login-card h2 { margin: 0 0 6px; font-size: 24px; }
+    .login-intro { margin: 0 0 24px; color: var(--text-soft); }
+    .login-field { display: grid; gap: 7px; margin-bottom: 16px; }
+    .login-field label { font-size: 12px; font-weight: 700; color: var(--text-soft); }
+    .login-field input { width: 100%; padding: 12px 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); color: var(--text); font: inherit; }
+    .login-field input:focus { outline: 2px solid var(--brand-line); border-color: var(--brand); }
+    .login-submit { width: 100%; justify-content: center; margin-top: 6px; }
+    .login-error { margin: 0 0 16px; padding: 10px 12px; border-radius: 9px; background: var(--danger-soft); color: var(--danger-text); font-size: 13px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <main class="login-shell">
+    <section class="login-card" aria-labelledby="loginTitle">
+      <div class="login-brand">
+        <img src="/assets/por-todos-elas-logo.png" alt="Por Todas Elas">
+        <div><h1>TodosPorElas</h1><p>Cadastro de Usuários</p></div>
+      </div>
+      <h2 id="loginTitle">Acessar dashboard</h2>
+      <p class="login-intro">Entre com suas credenciais para continuar.</p>
+      <p class="login-error" id="loginError" role="alert" hidden></p>
+      <form id="loginForm">
+        <div class="login-field">
+          <label for="username">Usuário</label>
+          <input id="username" name="username" autocomplete="username" required autofocus>
+        </div>
+        <div class="login-field">
+          <label for="password">Senha</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn-primary login-submit" id="loginSubmit" type="submit">Entrar</button>
+      </form>
+    </section>
+  </main>
+  <script src="/login.js"></script>
+</body>
+</html>

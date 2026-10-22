@@ -15,10 +15,6 @@ const $ = (id) => document.getElementById(id);
 
 async function fetchJson(input, options) {
   const headers = new Headers(options?.headers || {});
-  if (app.clerk?.session) {
-    const token = await app.clerk.session.getToken();
-    if (token) headers.set('Authorization', `Bearer ${token}`);
-  }
   const response = await fetch(input, { ...options, headers });
   const text = await response.text();
   if (!response.ok) {
@@ -822,9 +818,7 @@ async function connectStream() {
   let retry = 1000;
   while (true) {
     try {
-      const token = await app.clerk.session.getToken();
       const response = await fetch(API_STREAM, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
         cache: 'no-store'
       });
       if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
@@ -1127,47 +1121,4 @@ async function init() {
   connectStream();
 }
 
-async function initAuth() {
-  const gate = $('authGate');
-  const status = $('authStatus');
-  try {
-    let config;
-    try {
-      config = await fetchJson('/api/auth/config', { cache: 'no-store' });
-    } catch (error) {
-      if (!error.message.startsWith('HTTP 404')) throw error;
-      config = await fetchJson('/auth/config', { cache: 'no-store' });
-    }
-    if (!config.publishableKey || !window.Clerk) {
-      throw new Error('Clerk não está configurado no servidor');
-    }
-    const clerk = new window.Clerk(config.publishableKey);
-    await clerk.load();
-    app.clerk = clerk;
-    const startDashboard = async () => {
-      if (!clerk.user || app.started) return;
-      app.started = true;
-      gate.hidden = true;
-      document.body.classList.remove('auth-pending');
-      $('authUser').hidden = false;
-      $('authUserName').textContent = clerk.user.fullName || clerk.user.primaryEmailAddress?.emailAddress || 'Usuário';
-      $('btnLogout').addEventListener('click', async () => {
-        await clerk.signOut();
-        window.location.reload();
-      });
-      await init();
-    };
-    clerk.addListener(() => startDashboard());
-    if (clerk.user) {
-      await startDashboard();
-    } else {
-      status.hidden = true;
-      clerk.mountSignIn($('clerkSignIn'), { withSignUp: false });
-    }
-  } catch (error) {
-    status.textContent = `Não foi possível iniciar o login: ${error.message}`;
-    status.classList.add('auth-status-error');
-  }
-}
-
-initAuth();
+init();

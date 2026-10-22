@@ -15,18 +15,7 @@
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%97%3C/text%3E%3C/svg%3E" />
 </head>
 
-<body class="auth-pending">
-  <section class="auth-gate" id="authGate" aria-live="polite">
-    <div class="auth-card">
-      <img class="auth-logo" src="/assets/por-todos-elas-logo.png" alt="Por Todas Elas">
-      <p class="auth-kicker">Área restrita</p>
-      <h1>Acesse o dashboard</h1>
-      <p class="auth-description">Entre com sua conta autorizada para acompanhar os dados do projeto.</p>
-      <div id="clerkSignIn"></div>
-      <p class="auth-status" id="authStatus">Carregando autenticação…</p>
-    </div>
-  </section>
-
+<body>
   <header class="topbar">
     <div class="brand">
       <img class="brand-logo" src="/assets/por-todos-elas-logo.png" alt="Por Todas Elas">
@@ -37,10 +26,6 @@
     </div>
 
     <div class="topbar-actions" id="topbarActions">
-      <div class="auth-user" id="authUser" hidden>
-        <span class="auth-user-name" id="authUserName"></span>
-        <button class="btn btn-sm" id="btnLogout" type="button">Sair</button>
-      </div>
       <button class="theme-toggle" id="themeToggle" title="Alternar tema claro/escuro">
         <span id="themeIcon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -587,7 +572,6 @@
 
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="/vendor/apexcharts/apexcharts.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"></script>
   <script src="/app.js"></script>
 </body>
 
