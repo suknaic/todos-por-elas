@@ -1,17 +1,12 @@
 {
   "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
+  "outputDirectory": "dist",
   "installCommand": "npm install",
-  "framework": null,
+  "framework": "vite",
   "regions": ["gru1"],
   "routes": [
-    { "src": "/api/.*", "dest": "/api/index.js" },
-    { "src": "/vendor/(.*)", "dest": "/public/vendor/$1" },
-    { "src": "/assets/(.*)", "dest": "/public/assets/$1" },
-    { "src": "/geo/(.*)", "dest": "/public/geo/$1" },
-    { "src": "/styles.css", "dest": "/public/styles.css" },
-    { "src": "/login.js", "dest": "/public/login.js" },
-    { "src": "/login", "dest": "/public/login.html" },
-    { "src": "/(.*)", "dest": "/public/index.html" }
+    { "src": "/api/(.*)", "dest": "/api/index.js" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }

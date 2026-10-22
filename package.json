@@ -5,24 +5,32 @@
   "description": "Dashboard em tempo real do formulario KoboToolbox TodosPorElas",
   "type": "module",
   "scripts": {
-    "build:css": "tailwindcss -c ./tailwind.config.cjs -i ./public/styles.src.css -o ./public/styles.css",
-    "build": "npm run build:css",
-    "watch:css": "tailwindcss -c ./tailwind.config.cjs -i ./public/styles.src.css -o ./public/styles.css --watch",
-    "prestart": "npm run build:css",
-    "start": "PORT=4173 node --import dotenv/config server.js",
-    "predev": "npm run build:css",
-    "dev": "PORT=4173 node --import dotenv/config --watch server.js"
+    "dev": "concurrently -k -n api,web -c blue,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "PORT=4173 node --import dotenv/config --watch server.js",
+    "dev:web": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prestart": "npm run build",
+    "start": "NODE_ENV=production PORT=4173 node --import dotenv/config server.js",
+    "check": "node scripts/check.mjs"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19"
   },
   "dependencies": {
     "apexcharts": "^8.4.1",
     "dotenv": "^16.4.7",
     "leaflet": "^1.9.4",
-    "localtunnel": "^2.0.2"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
-    "tailwindcss": "^3.4.17"
+    "@vitejs/plugin-react": "^6.1.2",
+    "autoprefixer": "^10.6.1",
+    "concurrently": "^10.0.6",
+    "postcss": "^8.5.31",
+    "tailwindcss": "^3.4.17",
+    "vite": "^8.3.5"
   }
 }

@@ -22,7 +22,8 @@ import {
 } from './lib/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PUBLIC_DIR = path.join(__dirname, 'public');
+const isProduction = process.env.NODE_ENV === 'production';
+const PUBLIC_DIR = path.join(__dirname, isProduction ? 'dist' : 'public');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -137,6 +138,7 @@ async function serveStatic(req, res, pathname) {
 
 function handleStream(req, res) {
   res.writeHead(200, {
+    ...securityHeaders(),
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache, no-transform',
     Connection: 'keep-alive',
@@ -333,21 +335,7 @@ async function handleRequest(req, res) {
   }
 
   if (pathname === '/api/stream') {
-    res.writeHead(200, {
-      ...securityHeaders(),
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no'
-    });
-    res.write(`event: hello\ndata: ${JSON.stringify({ count: state.count, version: state.version })}\n\n`);
-    res.write(`event: stats\ndata: ${JSON.stringify({ count: state.count, version: state.version })}\n\n`);
-    state.clients.add(res);
-    const ping = setInterval(() => {
-      try { res.write(`: ping ${Date.now()}\n\n`); } catch { clearInterval(ping); }
-    }, 20000);
-    req.on('close', () => { clearInterval(ping); state.clients.delete(res); });
-    return;
+    return handleStream(req, res);
   }
 
   if (pathname === '/api/refresh') {
@@ -356,103 +344,28 @@ async function handleRequest(req, res) {
   }
 
   if (pathname === '/api/aggregate') {
-    const city = url.searchParams.get('city') || undefined;
-    const days = url.searchParams.get('days') || undefined;
-    const agg = computeAggregates(state.data, { fields: state.fields, choices: state.choices }, state.geoJSON, { city, days });
-    return json(res, 200, { ...agg, version: state.version });
+    return handleAggregate(req, res);
   }
 
   if (pathname === '/api/submissions') {
-    const page = Math.max(1, Number(url.searchParams.get('page') || 1));
-    const size = Math.min(100, Math.max(1, Number(url.searchParams.get('size') || 15)));
-    const city = url.searchParams.get('city') || undefined;
-    const q = url.searchParams.get('q') || undefined;
-    const days = url.searchParams.get('days') || undefined;
-    const rawSortKey = url.searchParams.get('sort') || 'submitted_at';
-    const sortDir = url.searchParams.get('dir') || 'desc';
-
-    let rows = state.data.slice();
-    if (city) {
-      const fCidade = resolveField(state.fields, 'Cidade da residência atual', 'wb2gy08');
-      rows = rows.filter((r) => cityName(getValue(r, fCidade, state.choices)) === city);
-    }
-    if (q) {
-      const nq = q.toLowerCase();
-      rows = rows.filter((r) => JSON.stringify(r).toLowerCase().includes(nq));
-    }
-    const SORT_KEYS = {
-      nome: 'Nome_do_usu_rio',
-      idade: 'Idade',
-      cidade: 'Cidade_da_resid_ncia_atual',
-      zona: 'Zona',
-      genero: 'Identidade_de_G_nero',
-      trabalha: 'Trabalha',
-      renda: 'Renda_Familiar_per_capita',
-      servicos: '__service_count',
-      cpf: 'CPF',
-      envio: '_submission_time',
-      submitted_at: '_submission_time'
-    };
-    const sortKey = SORT_KEYS[rawSortKey] || rawSortKey;
-    rows.sort((a, b) => {
-      let av = a[sortKey] ?? '';
-      let bv = b[sortKey] ?? '';
-      const an = Number(av), bn = Number(bv);
-      let cmp = 0;
-      if (av !== '' && bv !== '' && !Number.isNaN(an) && !Number.isNaN(bn)) cmp = an - bn;
-      else if (av < bv) cmp = -1;
-      else if (av > bv) cmp = 1;
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-    const start = (page - 1) * size;
-    const slice = rows.slice(start, start + size);
-    const pages = Math.max(1, Math.ceil(rows.length / size));
-    return json(res, 200, {
-      rows: slice.map((r) => ({
-        ...r,
-        __cpf: r.CPF ? '***' : null,
-        __envio: r._submission_time || r.received_at || ''
-      })),
-      total: rows.length,
-      page,
-      pages,
-      size
-    });
+    return handleSubmissions(req, res);
   }
 
   if (pathname === '/api/meta') {
-    return json(res, 200, {
-      ok: true,
-      count: state.count,
-      version: state.version,
-      clients: state.clients.size,
-      error: state.error,
-      pollIntervalMs: CONFIG.pollIntervalMs,
-      fields: state.fields.length
-    });
+    return handleMeta(req, res);
   }
 
   if (pathname === '/api/export.csv') {
-    res.writeHead(200, {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': 'attachment; export.csv"'
-    });
-    res.end('nome,idade,cidade,zona,genero,trabalha,renda,servicos,envio\n');
-    return;
+    return handleCsv(res);
   }
 
   if (pathname === '/api/export.resumo.csv') {
-    res.writeHead(200, {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': 'attachment; filename="resumo.csv"'
-    });
-    res.end('municipio,total\n');
-    return;
+    return handleCsvResumo(res);
   }
 
   if (pathname === '/geo/acre-municipios.geojson') {
     try {
-      const data = await fs.readFile(path.join(PUBLIC_DIR, 'geo', 'acre-municipios.geojson'));
+      const data = await fs.readFile(path.join(__dirname, 'public', 'geo', 'acre-municipios.geojson'));
       res.writeHead(200, { ...securityHeaders(), 'Content-Type': 'application/geo+json', 'Cache-Control': 'public, max-age=86400' });
       res.end(data);
     } catch {
@@ -465,16 +378,20 @@ async function handleRequest(req, res) {
     return json(res, 200, { ok: true, clients: state.clients.size, count: state.count });
   }
 
-  const rel = pathname === '/login' ? 'login.html' : pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
-  const filePath = path.join(PUBLIC_DIR, rel);
-  if (!filePath.startsWith(PUBLIC_DIR)) return json(res, 403, { error: 'Proibido' });
-  try {
-    const data = await fs.readFile(filePath);
-    res.writeHead(200, { ...securityHeaders(), 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
-    res.end(data);
-  } catch {
-    json(res, 404, { error: 'Não encontrado' });
+  const ext = path.extname(pathname);
+  if (!ext) {
+    try {
+      const data = await fs.readFile(path.join(PUBLIC_DIR, 'index.html'));
+      res.writeHead(200, { ...securityHeaders(), 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      res.end(data);
+      return;
+    } catch {
+      json(res, 404, { error: 'Não encontrado' });
+      return;
+    }
   }
+
+  await serveStatic(req, res, pathname);
 }
 
 async function init() {
