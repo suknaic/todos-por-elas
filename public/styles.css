@@ -794,22 +794,6 @@ tbody tr:hover {
 
 /* ---------- Cabeçalho ---------- */
 
-.\!topbar {
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 1000 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 16px !important;
-  flex-wrap: wrap !important;
-  padding: 16px 32px !important;
-  background: rgba(255, 255, 255, .7) !important;
-  backdrop-filter: blur(16px) saturate(1.15) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  border-bottom: 1px solid var(--border) !important;
-}
-
 .topbar {
   position: sticky;
   top: 0;
@@ -826,20 +810,6 @@ tbody tr:hover {
   border-bottom: 1px solid var(--border);
 }
 
-.\!topbar::after {
-  content: "" !important;
-  position: absolute !important;
-  left: 0 !important;
-  bottom: -1px !important;
-  width: 100% !important;
-  height: 2px !important;
-  background: var(--grad-brand) !important;
-  transform: scaleX(var(--scroll-progress, 0)) !important;
-  transform-origin: left center !important;
-  pointer-events: none !important;
-  transition: transform .1s linear !important;
-}
-
 .topbar::after {
   content: "";
   position: absolute;
@@ -852,10 +822,6 @@ tbody tr:hover {
   transform-origin: left center;
   pointer-events: none;
   transition: transform .1s linear;
-}
-
-[data-theme='dark'] .\!topbar {
-  background: rgba(18, 14, 31, .7) !important;
 }
 
 [data-theme='dark'] .topbar {
@@ -2033,13 +1999,28 @@ tbody tr:hover {
     display: none;
   }
 
-  .topbar-actions {
+  .sidebar-drawer {
     position: fixed;
     top: 0;
     right: 0;
     bottom: 0;
     width: min(86vw, 340px);
     height: 100dvh;
+    z-index: 1100;
+    pointer-events: none;
+  }
+
+  .sidebar-drawer[hidden] {
+    display: none;
+  }
+
+  .sidebar-drawer .topbar-actions {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -2051,10 +2032,10 @@ tbody tr:hover {
     overflow-y: auto;
     transform: translateX(100%);
     transition: transform .28s ease;
-    z-index: 1100;
+    pointer-events: auto;
   }
 
-  .topbar.menu-open .topbar-actions {
+  .sidebar-drawer:not([hidden]) .topbar-actions {
     transform: none;
   }
 
