@@ -14,7 +14,12 @@ const SCALE_DARK = ['#3a2d5c', '#4a3d70', '#8560c0', '#c3b0e2'];
 const $ = (id) => document.getElementById(id);
 
 async function fetchJson(input, options) {
-  const response = await fetch(input, options);
+  const headers = new Headers(options?.headers || {});
+  if (app.clerk?.session) {
+    const token = await app.clerk.session.getToken();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+  }
+  const response = await fetch(input, { ...options, headers });
   const text = await response.text();
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}${text ? `: ${text.slice(0, 160)}` : ''}`);
@@ -813,37 +818,52 @@ function initTema() {
 }
 
 // ---------- SSE ----------
-function connectStream() {
+async function connectStream() {
   let retry = 1000;
-  const es = new EventSource(API_STREAM);
-  es.addEventListener('hello', () => {
-    retry = 1000;
-    setLive('online', 'Tempo real');
-    showError(null);
-  });
-  es.addEventListener('stats', (ev) => {
-    setLive('online', 'Tempo real');
+  while (true) {
     try {
-      const p = JSON.parse(ev.data);
-      if (p.version != null && p.version !== app.lastVersion) {
-        app.lastVersion = p.version;
-        loadAggregate();
-        loadSubmissions();
+      const token = await app.clerk.session.getToken();
+      const response = await fetch(API_STREAM, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        cache: 'no-store'
+      });
+      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+      retry = 1000;
+      setLive('online', 'Tempo real');
+      showError(null);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) throw new Error('Conexão encerrada');
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split('\n\n');
+        buffer = frames.pop() || '';
+        for (const frame of frames) {
+          const event = frame.match(/^event:\s*(.+)$/m)?.[1];
+          const data = frame.match(/^data:\s*(.+)$/m)?.[1];
+          if (event === 'stats' && data) {
+            const p = JSON.parse(data);
+            if (p.version != null && p.version !== app.lastVersion) {
+              app.lastVersion = p.version;
+              loadAggregate();
+              loadSubmissions();
+            }
+          }
+          if (event === 'sync-error' && data) {
+            const p = JSON.parse(data);
+            showError(`Falha na sincronização com o Kobo: ${p.message}`);
+          }
+        }
       }
-    } catch { /* ignora */ }
-  });
-  es.addEventListener('sync-error', (ev) => {
-    try {
-      const p = JSON.parse(ev.data);
-      showError(`Falha na sincronização com o Kobo: ${p.message}`);
-    } catch { /* ignora */ }
-  });
-  es.addEventListener('error', () => {
-    es.close();
+    } catch (error) {
+      console.warn('[stream] conexão encerrada:', error.message);
+    }
     setLive('offline', 'Reconectando…');
-    setTimeout(connectStream, retry);
+    await new Promise((resolve) => setTimeout(resolve, retry));
     retry = Math.min(retry * 2, 30000);
-  });
+  }
 }
 
 function setLive(status, text) {
@@ -1107,4 +1127,47 @@ async function init() {
   connectStream();
 }
 
-init();
+async function initAuth() {
+  const gate = $('authGate');
+  const status = $('authStatus');
+  try {
+    let config;
+    try {
+      config = await fetchJson('/api/auth/config', { cache: 'no-store' });
+    } catch (error) {
+      if (!error.message.startsWith('HTTP 404')) throw error;
+      config = await fetchJson('/auth/config', { cache: 'no-store' });
+    }
+    if (!config.publishableKey || !window.Clerk) {
+      throw new Error('Clerk não está configurado no servidor');
+    }
+    const clerk = new window.Clerk(config.publishableKey);
+    await clerk.load();
+    app.clerk = clerk;
+    const startDashboard = async () => {
+      if (!clerk.user || app.started) return;
+      app.started = true;
+      gate.hidden = true;
+      document.body.classList.remove('auth-pending');
+      $('authUser').hidden = false;
+      $('authUserName').textContent = clerk.user.fullName || clerk.user.primaryEmailAddress?.emailAddress || 'Usuário';
+      $('btnLogout').addEventListener('click', async () => {
+        await clerk.signOut();
+        window.location.reload();
+      });
+      await init();
+    };
+    clerk.addListener(() => startDashboard());
+    if (clerk.user) {
+      await startDashboard();
+    } else {
+      status.hidden = true;
+      clerk.mountSignIn($('clerkSignIn'), { withSignUp: false });
+    }
+  } catch (error) {
+    status.textContent = `Não foi possível iniciar o login: ${error.message}`;
+    status.classList.add('auth-status-error');
+  }
+}
+
+initAuth();

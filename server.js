@@ -11,6 +11,7 @@ import {
 } from './lib/kobo.js';
 import { computeAggregates, cityName, getValue } from './lib/aggregate.js';
 import { resolveField } from './lib/normalize.js';
+import { authChallenge, authenticateRequest, clerkConfig, isAuthConfigPath } from './lib/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -26,32 +27,6 @@ const MIME = {
   '.csv': 'text/csv; charset=utf-8',
   '.geojson': 'application/geo+json'
 };
-
-const BASIC_USER = process.env.DASHBOARD_USER || '';
-const BASIC_PASS = process.env.DASHBOARD_PASS || '';
-const requireAuth = !!(BASIC_USER && BASIC_PASS);
-
-function basicAuth(req) {
-  if (!requireAuth) return true;
-  const auth = req.headers.authorization || '';
-  const match = auth.match(/^Basic\s+(.+)$/);
-  if (!match) return false;
-  try {
-    const decoded = Buffer.from(match[1], 'base64').toString('utf-8');
-    const [user, pass] = decoded.split(':');
-    return user === BASIC_USER && pass === BASIC_PASS;
-  } catch {
-    return false;
-  }
-}
-
-function authChallenge(res) {
-  res.writeHead(401, {
-    'WWW-Authenticate': 'Basic realm="Dashboard"',
-    'Content-Type': 'text/plain'
-  });
-  res.end('Não autorizado');
-}
 
 const state = {
   schema: null,
@@ -307,13 +282,20 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function handleRequest(req, res) {
-  if (requireAuth && !basicAuth(req)) return authChallenge(res);
-
   const url = new URL(req.url, `http://${req.headers.host}`);
   const { pathname } = url;
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return json(res, 405, { error: 'Método não permitido' });
+  }
+
+  if (isAuthConfigPath(pathname)) {
+    return json(res, 200, { publishableKey: clerkConfig.publishableKey });
+  }
+
+  if (pathname.startsWith('/api/') && pathname !== '/health') {
+    const auth = await authenticateRequest(req);
+    if (!auth.ok && auth.type !== 'basic') return authChallenge(res, auth.status, auth.message);
   }
 
   if (pathname === '/api/data') {
@@ -498,7 +480,8 @@ async function init() {
   server.listen(CONFIG.port, () => {
     console.log(`Dashboard em http://localhost:${CONFIG.port}`);
     console.log(`Projeto: ${CONFIG.assetUid} | Poll: ${CONFIG.pollIntervalMs / 1000}s | Registros: ${state.count}`);
-    if (requireAuth) console.log('[auth] Basic auth ativo');
+    if (process.env.DASHBOARD_USER && process.env.DASHBOARD_PASS) console.log('[auth] Basic auth compatível ativo');
+    if (clerkConfig.configured) console.log('[auth] Clerk ativo');
   });
 
   pollOnce({ silent: true }).catch(() => {});

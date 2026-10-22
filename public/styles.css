@@ -649,6 +649,10 @@ video {
   display: none !important;
 }
 
+body.auth-pending > :not(#authGate):not(script) {
+  display: none !important;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -661,6 +665,72 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+.auth-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at 20% 10%, var(--brand-soft), transparent 42%), var(--bg);
+}
+
+.auth-card {
+  width: min(430px, 100%);
+  padding: 36px;
+  text-align: center;
+  background: var(--grad-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.auth-logo {
+  display: block;
+  width: 84px;
+  height: auto;
+  border-radius: 16px;
+  margin: 0 auto 18px;
+}
+
+.auth-kicker {
+  margin: 0 0 6px;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.auth-card h1 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -.04em;
+}
+
+.auth-description {
+  margin: 10px 0 24px;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.auth-status {
+  margin: 16px 0 0;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.auth-status-error {
+  color: var(--danger-text);
+}
+
+.auth-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 main {
@@ -931,23 +1001,6 @@ tbody tr:hover {
 
 /* ---------- Botões ---------- */
 
-.\!btn {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 7px !important;
-  padding: 9px 16px !important;
-  border-radius: 11px !important;
-  border: 1px solid var(--border) !important;
-  background: var(--surface) !important;
-  color: var(--text) !important;
-  font: inherit !important;
-  font-weight: 600 !important;
-  font-size: 13px !important;
-  cursor: pointer !important;
-  text-decoration: none !important;
-  transition: .18s ease !important;
-}
-
 .btn {
   display: inline-flex;
   align-items: center;
@@ -965,13 +1018,6 @@ tbody tr:hover {
   transition: .18s ease;
 }
 
-.\!btn:hover {
-  border-color: var(--brand) !important;
-  color: var(--brand) !important;
-  transform: translateY(-1px) !important;
-  box-shadow: var(--shadow-sm) !important;
-}
-
 .btn:hover {
   border-color: var(--brand);
   color: var(--brand);
@@ -979,18 +1025,8 @@ tbody tr:hover {
   box-shadow: var(--shadow-sm);
 }
 
-.\!btn:active {
-  transform: translateY(0) !important;
-}
-
 .btn:active {
   transform: translateY(0);
-}
-
-.\!btn:disabled {
-  opacity: .55 !important;
-  cursor: progress !important;
-  transform: none !important;
 }
 
 .btn:disabled {

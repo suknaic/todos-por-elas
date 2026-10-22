@@ -6,7 +6,11 @@ const BASE = process.env.BASE || `http://localhost:${PORT}`;
 
 function get(path) {
   return new Promise((resolve, reject) => {
-    http.get(`${BASE}${path}`, (res) => {
+    const headers = {};
+    if (process.env.DASHBOARD_USER && process.env.DASHBOARD_PASS) {
+      headers.authorization = `Basic ${Buffer.from(`${process.env.DASHBOARD_USER}:${process.env.DASHBOARD_PASS}`).toString('base64')}`;
+    }
+    http.get(`${BASE}${path}`, { headers }, (res) => {
       let data = '';
       res.on('data', (c) => (data += c));
       res.on('end', () => {

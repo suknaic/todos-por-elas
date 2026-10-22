@@ -9,6 +9,7 @@ import {
 } from '../lib/kobo.js';
 import { computeAggregates, cityName, getValue } from '../lib/aggregate.js';
 import { resolveField } from '../lib/normalize.js';
+import { authChallenge, authenticateRequest, clerkConfig, isAuthConfigPath } from '../lib/auth.js';
 
 const __dirname = path.dirname(path.resolve());
 
@@ -24,27 +25,6 @@ const MIME_TYPES = {
   '.svg': 'image/svg+xml',
   '.geojson': 'application/geo+json'
 };
-
-let requireAuth = false;
-if (process.env.DASHBOARD_USER && process.env.DASHBOARD_PASS) {
-  requireAuth = true;
-}
-
-function basicAuth(req) {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Basic ')) return false;
-  const cred = Buffer.from(auth.slice(6), 'base64').toString('utf-8');
-  const [user, pass] = cred.split(':');
-  return user === process.env.DASHBOARD_USER && pass === process.env.DASHBOARD_PASS;
-}
-
-function authChallenge(res) {
-  res.writeHead(401, {
-    'WWW-Authenticate': 'Basic realm="Dashboard"',
-    'Content-Type': 'text/plain'
-  });
-  res.end('Autenticação necessária');
-}
 
 function json(res, status, obj) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -74,13 +54,20 @@ async function loadGeoJSON() {
 }
 
 async function handleRequest(req, res) {
-  if (requireAuth && !basicAuth(req)) return authChallenge(res);
-
   const url = new URL(req.url, `http://${req.headers.host}`);
   const { pathname } = url;
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return json(res, 405, { error: 'Método não permitido' });
+  }
+
+  if (isAuthConfigPath(pathname)) {
+    return json(res, 200, { publishableKey: clerkConfig.publishableKey });
+  }
+
+  if (pathname.startsWith('/api/') && pathname !== '/health') {
+    const auth = await authenticateRequest(req);
+    if (!auth.ok && auth.type !== 'basic') return authChallenge(res, auth.status, auth.message);
   }
 
   if (pathname === '/api/data') {
