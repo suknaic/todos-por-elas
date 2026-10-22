@@ -919,6 +919,41 @@ function bind() {
 
 }
 
+function initMenu() {
+  const btnMenu = $('btnMenu');
+  const topbar = document.querySelector('.topbar');
+  const backdrop = $('sidebarBackdrop');
+  const btnClose = $('btnMenuClose');
+  const actions = $('topbarActions');
+  if (!btnMenu || !topbar || !backdrop || !btnClose || !actions) return;
+
+  const mq = window.matchMedia('(max-width: 900px)');
+  let wasOpen = false;
+
+  function setOpen(open) {
+    topbar.classList.toggle('menu-open', open);
+    btnMenu.setAttribute('aria-expanded', String(open));
+    backdrop.hidden = !open;
+    document.body.style.overflow = open ? 'hidden' : '';
+  }
+
+  function closeMenu() { setOpen(false); }
+
+  btnMenu.addEventListener('click', () => setOpen(!topbar.classList.contains('menu-open')));
+  btnClose.addEventListener('click', closeMenu);
+  backdrop.addEventListener('click', closeMenu);
+
+  actions.querySelectorAll('button:not(.drawer-close), a').forEach(el => {
+    el.addEventListener('click', () => { if (mq.matches) closeMenu(); });
+  });
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && mq.matches) closeMenu(); });
+
+  mq.addEventListener('change', e => {
+    if (!e.matches && topbar.classList.contains('menu-open')) closeMenu();
+  });
+}
+
 async function loadSchema() {
   try {
     const json = await fetchJson(API_SCHEMA, { cache: 'no-store' });
@@ -1060,6 +1095,7 @@ function initSecoes() {
 
 async function init() {
   bind();
+  initMenu();
   initTema();
   initScrollProgress();
   initSecoes();

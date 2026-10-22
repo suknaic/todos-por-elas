@@ -25,7 +25,11 @@
       </div>
     </div>
 
-    <div class="topbar-actions">
+    <button class="menu-toggle" id="btnMenu" aria-label="Abrir menu"
+            aria-controls="topbarActions" aria-expanded="false">☰</button>
+
+    <div class="topbar-actions" id="topbarActions">
+      <button class="drawer-close" id="btnMenuClose" aria-label="Fechar menu">×</button>
       <button class="theme-toggle" id="themeToggle" title="Alternar tema claro/escuro">
         <span id="themeIcon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -49,6 +53,7 @@
         <span>Seções</span>
       </button>
     </div>
+    <div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
   </header>
 
   <div class="error-banner" id="errorBanner" hidden>
