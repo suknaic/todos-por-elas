@@ -790,26 +790,26 @@ const ICON_MOON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" s
 const ICON_SUN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>';
 
 function initTema() {
-  const btn = $('themeToggle');
-  const icon = $('themeIcon');
-  const text = $('themeText');
+  const btns = [$('themeToggle'), $('mobileThemeToggle')].filter(Boolean);
+  const icons = [$('themeIcon'), $('mobileThemeIcon')].filter(Boolean);
+  const texts = [$('themeText'), $('mobileThemeText')].filter(Boolean);
   const saved = localStorage.getItem('dashboard:theme');
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const theme = saved || (prefersDark ? 'dark' : 'light');
   document.documentElement.dataset.theme = theme;
-  icon.innerHTML = theme === 'dark' ? ICON_SUN : ICON_MOON;
-  text.textContent = theme === 'dark' ? 'Claro' : 'Escuro';
-  btn.addEventListener('click', () => {
+  icons.forEach(ic => ic.innerHTML = theme === 'dark' ? ICON_SUN : ICON_MOON);
+  texts.forEach(t => t.textContent = theme === 'dark' ? 'Claro' : 'Escuro');
+  btns.forEach(btn => btn.addEventListener('click', () => {
     const atual = document.documentElement.dataset.theme;
     const novo = atual === 'dark' ? 'light' : 'dark';
     document.documentElement.dataset.theme = novo;
     localStorage.setItem('dashboard:theme', novo);
-    icon.innerHTML = novo === 'dark' ? ICON_SUN : ICON_MOON;
-    text.textContent = novo === 'dark' ? 'Claro' : 'Escuro';
+    icons.forEach(ic => ic.innerHTML = novo === 'dark' ? ICON_SUN : ICON_MOON);
+    texts.forEach(t => t.textContent = novo === 'dark' ? 'Claro' : 'Escuro');
     app.charts.forEach((c) => c.destroy());
     app.charts.clear();
     loadAggregate();
-  });
+  }));
 }
 
 // ---------- SSE ----------
@@ -847,10 +847,11 @@ function connectStream() {
 }
 
 function setLive(status, text) {
-  const badge = $('liveBadge');
-  badge.classList.remove('online', 'offline');
-  if (status) badge.classList.add(status);
-  $('liveText').textContent = text;
+  [$('liveBadge'), $('mobileLiveBadge')].filter(Boolean).forEach(badge => {
+    badge.classList.remove('online', 'offline');
+    if (status) badge.classList.add(status);
+  });
+  [$('liveText'), $('mobileLiveText')].filter(Boolean).forEach(el => el.textContent = text);
 }
 
 function showError(msg) {
@@ -869,8 +870,10 @@ function showToast(msg) {
 }
 
 function bind() {
-  $('btnRefresh').addEventListener('click', () => { loadAggregate(); loadSubmissions(); showToast('Dados atualizados'); });
+  [$('btnRefresh'), $('mobileBtnRefresh')].filter(Boolean).forEach(btn => btn.addEventListener('click', () => { loadAggregate(); loadSubmissions(); showToast('Dados atualizados'); }));
   $('errorClose').addEventListener('click', () => showError(null));
+
+  [$('btnVisibilidade'), $('mobileBtnVisibilidade')].filter(Boolean).forEach(btn => btn.addEventListener('click', () => { /* handled in initSecoes */ }));
 
   $('filtroPeriodo').addEventListener('change', (e) => {
     app.periodoFiltro = e.target.value;
@@ -924,8 +927,8 @@ function initMenu() {
   const drawer = document.getElementById('sidebarDrawer');
   const backdrop = $('sidebarBackdrop');
   const btnClose = $('btnMenuClose');
-  const actions = $('topbarActions');
-  if (!btnMenu || !drawer || !backdrop || !btnClose || !actions) return;
+  const mobileActions = $('mobileTopbarActions');
+  if (!btnMenu || !drawer || !backdrop || !btnClose || !mobileActions) return;
 
   const mq = window.matchMedia('(max-width: 900px)');
 
@@ -942,7 +945,7 @@ function initMenu() {
   btnClose.addEventListener('click', closeMenu);
   backdrop.addEventListener('click', closeMenu);
 
-  actions.querySelectorAll('button:not(.drawer-close), a').forEach(el => {
+  mobileActions.querySelectorAll('button:not(.drawer-close), a').forEach(el => {
     el.addEventListener('click', () => { if (mq.matches) closeMenu(); });
   });
 
@@ -1070,18 +1073,18 @@ function aplicarVisibilidade() {
 }
 
 function initSecoes() {
-  const btn = $('btnVisibilidade');
+  const btns = [$('btnVisibilidade'), $('mobileBtnVisibilidade')].filter(Boolean);
   const modal = $('modalSecoes');
   const backdrop = $('modalSecoesBackdrop');
   const fechar = $('modalSecoesFechar');
   const aplicar = $('modalSecoesAplicar');
   const resetar = $('modalSecoesReset');
-  if (!btn || !modal) return;
+  if (!btns.length || !modal) return;
   montarModalSecoes();
   aplicarVisibilidade();
   const abrir = () => { montarModalSecoes(); modal.hidden = false; };
   const fecharModal = () => { modal.hidden = true; };
-  btn.addEventListener('click', abrir);
+  btns.forEach(btn => btn.addEventListener('click', abrir));
   fechar.addEventListener('click', fecharModal);
   backdrop.addEventListener('click', fecharModal);
   aplicar.addEventListener('click', fecharModal);

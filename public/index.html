@@ -25,13 +25,7 @@
       </div>
     </div>
 
-    <button class="menu-toggle" id="btnMenu" aria-label="Abrir menu"
-            aria-controls="topbarActions" aria-expanded="false">☰</button>
-  </header>
-
-  <div class="sidebar-drawer" id="sidebarDrawer" hidden>
     <div class="topbar-actions" id="topbarActions">
-      <button class="drawer-close" id="btnMenuClose" aria-label="Fechar menu">×</button>
       <button class="theme-toggle" id="themeToggle" title="Alternar tema claro/escuro">
         <span id="themeIcon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -47,6 +41,37 @@
       <a class="btn" href="/api/export.resumo.csv" id="btnExportResumo">Resumo por município</a>
       <button class="btn btn-primary" id="btnRefresh">Atualizar agora</button>
       <button class="btn" id="btnVisibilidade" title="Selecionar seções visíveis">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+        <span>Seções</span>
+      </button>
+    </div>
+
+    <button class="menu-toggle" id="btnMenu" aria-label="Abrir menu"
+            aria-controls="mobileTopbarActions" aria-expanded="false">☰</button>
+  </header>
+
+  <div class="sidebar-drawer" id="sidebarDrawer" hidden>
+    <div class="topbar-actions" id="mobileTopbarActions">
+      <button class="drawer-close" id="btnMenuClose" aria-label="Fechar menu">×</button>
+      <button class="theme-toggle" id="mobileThemeToggle" title="Alternar tema claro/escuro">
+        <span id="mobileThemeIcon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg></span>
+        <span id="mobileThemeText">Escuro</span>
+      </button>
+      <div class="live" id="mobileLiveBadge" title="Status da conexão em tempo real">
+        <span class="live-dot"></span>
+        <span id="mobileLiveText">Conectando…</span>
+      </div>
+      <a class="btn" href="/api/export.csv" id="mobileBtnExport">Exportar CSV</a>
+      <a class="btn" href="/api/export.resumo.csv" id="mobileBtnExportResumo">Resumo por município</a>
+      <button class="btn btn-primary" id="mobileBtnRefresh">Atualizar agora</button>
+      <button class="btn" id="mobileBtnVisibilidade" title="Selecionar seções visíveis">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>

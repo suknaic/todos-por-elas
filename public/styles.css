@@ -1999,6 +1999,12 @@ tbody tr:hover {
     display: none;
   }
 
+  /* esconder ações do header no mobile */
+
+  .topbar-actions {
+    display: none;
+  }
+
   .sidebar-drawer {
     position: fixed;
     top: 0;

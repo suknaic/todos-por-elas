@@ -467,6 +467,9 @@
   .brand-text h1 { font-size: 16px; }
   .brand-text p { display: none; }
 
+  /* esconder ações do header no mobile */
+  .topbar-actions { display: none; }
+
   .sidebar-drawer {
     position: fixed;
     top: 0;
