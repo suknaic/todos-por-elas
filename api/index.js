@@ -7,7 +7,8 @@ import {
   fetchSchema as koboFetchSchema,
   fetchIncremental
 } from '../lib/kobo.js';
-import { computeAggregates, cityName, getValue } from '../lib/aggregate.js';
+import { computeAggregates, cityName, getValue, countRecordServices } from '../lib/aggregate.js';
+import { buildServiceEntities } from '../lib/services.js';
 import { resolveField } from '../lib/normalize.js';
 import {
   authChallenge,
@@ -43,6 +44,7 @@ const state = {
   schema: null,
   fields: [],
   choices: {},
+  serviceEntities: [],
   records: [],
   data: [],
   storeMaxId: null,
@@ -128,7 +130,7 @@ async function handleRequest(req, res) {
   if (pathname === '/api/aggregate') {
     const city = url.searchParams.get('city') || undefined;
     const days = url.searchParams.get('days') || undefined;
-    const agg = computeAggregates(state.data, { fields: state.fields, choices: state.choices }, state.geoJSON, { city, days });
+    const agg = computeAggregates(state.data, state.schema || { fields: state.fields, choices: state.choices }, state.geoJSON, { city, days });
     return json(res, 200, { ...agg, version: state.version });
   }
 
@@ -164,6 +166,9 @@ async function handleRequest(req, res) {
       submitted_at: '_submission_time'
     };
     const sortKey = SORT_KEYS[rawSortKey] || rawSortKey;
+    if (sortKey === '__service_count') {
+      rows = rows.map((r) => ({ ...r, __service_count: countRecordServices(r, state.serviceEntities, state.choices) }));
+    }
     rows.sort((a, b) => {
       let av = a[sortKey] ?? '';
       let bv = b[sortKey] ?? '';
@@ -297,9 +302,10 @@ function broadcast(event, data) {
 async function init() {
   try {
     const schema = await koboFetchSchema();
-    state.schema = schema;
     state.fields = schema.fields || [];
     state.choices = schema.choices || {};
+    state.serviceEntities = buildServiceEntities({ ...schema, fields: state.fields, choices: state.choices });
+    state.schema = { ...schema, serviceEntities: state.serviceEntities };
   } catch (err) {
     console.error('[schema] falha:', err.message);
   }

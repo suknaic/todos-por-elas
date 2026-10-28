@@ -395,14 +395,14 @@
       </div>
     </section>
 
-    <!-- Painel 4 — Demanda por serviços -->
+    <!-- Painel 4 — Demanda por serviços e órgãos -->
     <section class="section" id="sec-demanda-servicos">
-      <h2 class="section-title">Painel 4 — Demanda por serviços</h2>
+      <h2 class="section-title">Painel 4 — Demanda por serviços e órgãos</h2>
       <div class="grid">
         <article class="card card-wide">
-          <h3>Serviços mais procurados</h3>
+          <h3>Cadastros por órgão</h3>
           <div class="chart-box tall">
-            <div class="chart" id="chartServicos"></div>
+            <div class="chart" id="chartEntidades"></div>
           </div>
         </article>
         <article class="card card-wide">
@@ -412,27 +412,51 @@
           </div>
         </article>
         <article class="card card-wide">
-          <h3>Demanda por município</h3>
+          <h3>Serviços mais procurados por órgão</h3>
+          <div class="chart-box tall">
+            <div class="chart" id="chartServicos"></div>
+          </div>
+        </article>
+        <article class="card card-wide">
+          <h3>Serviços por órgão</h3>
+          <div class="table-scroll" style="max-height:360px;overflow:auto">
+            <table id="tabelaEntidades">
+              <thead>
+                <tr>
+                  <th>Órgão</th>
+                  <th>Área</th>
+                  <th>Cadastros</th>
+                  <th>% cadastros</th>
+                  <th>Serviços</th>
+                  <th>Mais procurado</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyEntidades"></tbody>
+            </table>
+          </div>
+        </article>
+        <article class="card card-wide">
+          <h3>Serviços selecionados por município</h3>
           <div class="chart-box">
             <div class="chart" id="chartDemandaCidade"></div>
           </div>
         </article>
         <article class="card card-wide">
-          <h3>Evolução mensal dos serviços</h3>
+          <h3>Evolução mensal da demanda por órgão</h3>
           <div class="chart-box tall">
             <div class="chart" id="chartServicosMes"></div>
           </div>
         </article>
         <article class="card card-wide">
-          <h3>Renda x serviços procurados</h3>
+          <h3>Renda x órgãos procurados</h3>
           <div class="chart-box tall">
-            <div class="chart" id="chartRendaXservicos"></div>
+            <div class="chart" id="chartRendaXentidades"></div>
           </div>
         </article>
         <article class="card card-wide">
-          <h3>Zona de residência x serviços</h3>
+          <h3>Zona de residência x órgãos</h3>
           <div class="chart-box">
-            <div class="chart" id="chartZonaXservicos"></div>
+            <div class="chart" id="chartZonaXentidades"></div>
           </div>
         </article>
         <article class="card card-wide">
@@ -442,15 +466,15 @@
           </div>
         </article>
         <article class="card card-wide">
-          <h3>CRAS/CREAS x serviços</h3>
+          <h3>CRAS/CREAS x órgãos</h3>
           <div class="chart-box">
-            <div class="chart" id="chartCrasXservicos"></div>
+            <div class="chart" id="chartCrasXentidades"></div>
           </div>
         </article>
         <article class="card card-wide">
-          <h3>Raça/cor x serviços</h3>
+          <h3>Raça/cor x órgãos</h3>
           <div class="chart-box">
-            <div class="chart" id="chartRacaXservicos"></div>
+            <div class="chart" id="chartRacaXentidades"></div>
           </div>
         </article>
         <article class="card card-wide">

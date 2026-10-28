@@ -41,6 +41,7 @@ const app = {
   schema: null,
   fields: [],
   choices: {},
+  serviceEntities: [],
   records: [],
   charts: new Map(),
   map: null,
@@ -110,7 +111,7 @@ function getValue(rec, field) {
   const v = rec[field.xpath] ?? rec[field.name] ?? rec[normKey(field.xpath)] ?? rec[normKey(field.name)];
   if (v == null) return '';
   if (field.type === 'select_multiple') {
-    const arr = Array.isArray(v) ? v : String(v).split(/[;, ]+/).filter(Boolean);
+    const arr = Array.isArray(v) ? v : String(v).split(/[\s;]+/).filter(Boolean);
     return arr.map((x) => choiceLabel(field.list, x)).filter(Boolean);
   }
   if (field.list) return choiceLabel(field.list, v);
@@ -430,7 +431,7 @@ function renderKpis(agg) {
   setKpi('kpiDeficiencia', ind.pctComDeficiencia || 0, 1);
   $('kpiDeficienciaSub').textContent = '% com deficiência na família';
   setKpi('kpiMediaServicos', agg.servicos.media || 0, 2);
-  $('kpiMediaServicosSub').textContent = 'média solicitada por cadastro';
+  $('kpiMediaServicosSub').textContent = `${agg.servicos.mediaEntidades || 0} órgãos por cadastro`;
   setKpi('kpiCompletude', agg.qualidade.mediaCompletude, 1);
   $('kpiCompletudeSub').textContent = '% dos campos preenchidos por cadastro';
   setKpi('kpiDup', agg.qualidade.duplicidadesCPF.length);
@@ -438,6 +439,27 @@ function renderKpis(agg) {
 }
 
 // ---------- Charts ----------
+function renderEntidades(entidades) {
+  const tbody = $('tbodyEntidades');
+  if (!tbody) return;
+  if (!entidades.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-soft)">Sem serviços registrados</td></tr>';
+    return;
+  }
+  tbody.innerHTML = entidades.map((entity) => {
+    const principal = (entity.servicos && entity.servicos[0]) || ['—', 0];
+    const totalServicos = (entity.servicos || []).length;
+    return `<tr>
+      <td><strong>${esc(entity.label)}</strong><br><span style="font-size:11px;color:var(--text-soft)">${esc(entity.short)}</span></td>
+      <td>${esc(entity.area)}</td>
+      <td>${entity.cadastros}</td>
+      <td>${entity.pct}%</td>
+      <td>${entity.selecoes}<br><span style="font-size:11px;color:var(--text-soft)">${totalServicos} tipo${totalServicos === 1 ? '' : 's'}</span></td>
+      <td>${esc(principal[0])}${principal[1] ? ` <span class="pill">${principal[1]}</span>` : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
 function renderCharts(agg) {
   const d = agg.demografia;
   const s = agg.socioeconomico;
@@ -470,25 +492,26 @@ function renderCharts(agg) {
   stackedChart('chartTrabalhaXrenda', v.trabalhaXrenda, { maxSeries: 4 });
   stackedChart('chartRacaXrenda', v.racaXrenda, { maxSeries: 5 });
 
-  // Painel 4 — demanda por serviços
-  barChart('chartServicos', sv.ranking, { horizontal: true, max: 20, ordered: true });
+  // Painel 4 — demanda por serviços e órgãos
+  barChart('chartEntidades', (sv.entidades || []).map((e) => [e.label, e.cadastros]), { horizontal: true, max: 12, ordered: true });
   barChart('chartAreas', dm.areas || [], { horizontal: true, max: 8, ordered: true });
+  barChart('chartServicos', sv.ranking, { horizontal: true, max: 20, ordered: true });
   barChart('chartDemandaCidade', dm.porCidade || [], { horizontal: true, max: 10, ordered: true });
 
   const porMes = dm.porMes || {};
   const meses = Object.keys(porMes).sort();
   const porMesOrd = {};
   for (const m of meses) porMesOrd[fmtMes(m)] = porMes[m];
-  stackedChart('chartServicosMes', porMesOrd, { maxSeries: 6 });
+  stackedChart('chartServicosMes', porMesOrd, { maxSeries: 12 });
 
-  stackedChart('chartRendaXservicos', v.rendaXservicos, { horizontal: true, maxSeries: 6 });
-  stackedChart('chartZonaXservicos', v.zonaXservicos, { maxSeries: 6 });
+  stackedChart('chartRendaXentidades', v.rendaXentidades, { horizontal: true, maxSeries: 12 });
+  stackedChart('chartZonaXentidades', v.zonaXentidades, { maxSeries: 12 });
   const idadeOrdem = ['0–17', '18–24', '25–34', '35–44', '45–54', '55+'];
   const idadeOrd = {};
   for (const k of idadeOrdem) if (dm.idadeXsaude?.[k]) idadeOrd[k] = dm.idadeXsaude[k];
-  stackedChart('chartIdadeXsaude', idadeOrd, { maxSeries: 6 });
-  stackedChart('chartCrasXservicos', v.acompanhamentoXservicos, { horizontal: true, maxSeries: 6 });
-  stackedChart('chartRacaXservicos', v.racaXservicos, { maxSeries: 6 });
+  stackedChart('chartIdadeXsaude', idadeOrd, { maxSeries: 8 });
+  stackedChart('chartCrasXentidades', v.acompanhamentoXentidades, { horizontal: true, maxSeries: 12 });
+  stackedChart('chartRacaXentidades', v.racaXentidades, { maxSeries: 12 });
   histogramChart('chartHistServicos', sv.histograma || []);
 
   // Qualidade
@@ -640,11 +663,30 @@ function cellChoice(r, list) {
   return Array.isArray(v) ? v.join(', ') : v;
 }
 
+function serviceSummary(r) {
+  const selected = [];
+  let total = 0;
+  for (const entity of app.serviceEntities || []) {
+    if (!entity.field) continue;
+    const value = getValue(r, entity.field);
+    const servs = Array.isArray(value) ? value : (value ? [value] : []);
+    if (!servs.length) continue;
+    total += servs.length;
+    selected.push({ entity, servs });
+  }
+  return { total, selected };
+}
+
 function serviceCount(r) {
-  const f = fieldByList('zx7ud82');
-  if (!f) return 0;
-  const v = getValue(r, f);
-  return Array.isArray(v) ? v.length : (v ? 1 : 0);
+  return serviceSummary(r).total;
+}
+
+function serviceEntityPills(r) {
+  const { selected } = serviceSummary(r);
+  if (!selected.length) return '';
+  return selected.map(({ entity, servs }) =>
+    `<span class="pill pill-entidade" title="${esc(servs.join(', '))}">${esc(entity.short)}</span>`
+  ).join(' ');
 }
 
 const TABLE_COLS = [
@@ -655,7 +697,7 @@ const TABLE_COLS = [
   { key: 'genero', label: 'Gênero', get: (r) => cellChoice(r, 'xv1wh54'), html: (r) => esc(cellChoice(r, 'xv1wh54')) },
   { key: 'trabalha', label: 'Trabalha', get: (r) => cellChoice(r, 'li3gq59'), html: (r) => esc(cellChoice(r, 'li3gq59')) },
   { key: 'renda', label: 'Renda per capita', get: (r) => cellChoice(r, 'bi8dg53'), html: (r) => esc(cellChoice(r, 'bi8dg53')) },
-  { key: 'servicos', label: 'Serviços', get: (r) => serviceCount(r), html: (r) => { const n = serviceCount(r); return n ? `<span class="pill">${n}</span>` : ''; } },
+  { key: 'servicos', label: 'Serviços / órgãos', get: (r) => serviceCount(r), html: (r) => { const n = serviceCount(r); const pills = serviceEntityPills(r); return n ? `<div class="service-pills"><span class="pill">${n}</span>${pills ? `<span class="service-entities">${pills}</span>` : ''}</div>` : ''; } },
   { key: 'cpf', label: 'CPF', get: (r) => r.CPF, html: (r) => (r.CPF ? (app.reveal ? esc(r.CPF) : '<span class="masked">••••••••</span>') : '') },
   { key: 'envio', label: 'Envio', get: (r) => r.__envio, html: (r) => esc(fmtDate(r.__envio)) }
 ];
@@ -723,6 +765,7 @@ async function loadAggregate() {
     window.aggCobertura = json.cobertura || [];
     aggN = json.n || 0;
     renderKpis(json);
+    renderEntidades(json.servicos?.entidades || []);
     renderCharts(json);
     renderEvolucao(json);
     renderMapaTabela(json.cobertura || []);
@@ -990,6 +1033,7 @@ async function loadSchema() {
     app.schema = json.schema;
     app.fields = json.schema?.fields || [];
     app.choices = json.schema?.choices || {};
+    app.serviceEntities = json.schema?.serviceEntities || [];
     if (app.schema?.title) {
       $('projectTitle').textContent = app.schema.title;
       document.title = `${app.schema.title} — Dashboard`;
@@ -1052,7 +1096,7 @@ const LABEL_SECOS = {
   'sec-cobertura': 'Cobertura territorial (mapa)',
   'sec-perfil-social': 'Painel 2 — Perfil social e familiar',
   'sec-vulnerabilidade': 'Painel 3 — Vulnerabilidade socioeconômica',
-  'sec-demanda-servicos': 'Painel 4 — Demanda por serviços',
+  'sec-demanda-servicos': 'Painel 4 — Demanda por serviços e órgãos',
   'sec-qualidade': 'Qualidade da coleta',
   'sec-cadastros-recentes': 'Cadastros recentes (tabela)'
 };

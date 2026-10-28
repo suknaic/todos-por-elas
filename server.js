@@ -9,7 +9,8 @@ import {
   fetchIncremental,
   loadGeoJSON
 } from './lib/kobo.js';
-import { computeAggregates, cityName, getValue } from './lib/aggregate.js';
+import { computeAggregates, cityName, getValue, countRecordServices } from './lib/aggregate.js';
+import { buildServiceEntities } from './lib/services.js';
 import { resolveField } from './lib/normalize.js';
 import {
   authChallenge,
@@ -40,6 +41,7 @@ const state = {
   schema: null,
   fields: [],
   choices: {},
+  serviceEntities: [],
   signature: null,
   data: [],
   storeMaxId: null,
@@ -185,7 +187,7 @@ function handleCsv(res) {
 }
 
 function handleCsvResumo(res) {
-  const agg = computeAggregates(state.data, { fields: state.fields, choices: state.choices }, state.geoJSON, {});
+  const agg = computeAggregates(state.data, state.schema || { fields: state.fields, choices: state.choices }, state.geoJSON, {});
   const linhas = agg.cobertura.map((c) => `${c.codigoIbge},${escapeCsv(c.nome)},${c.n},${c.pct},${c.mediaIdade},${c.urbana},${c.comServico},${c.acompanhado}`);
   const header = 'codigo_ibge,municipio,cadastros,pct_total,idade_media,urbana,com_servico,acompanhado';
   const payload = '\uFEFF' + header + '\n' + linhas.join('\n');
@@ -201,7 +203,7 @@ function handleAggregate(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const city = url.searchParams.get('city') || undefined;
   const days = url.searchParams.get('days') || undefined;
-  const agg = computeAggregates(state.data, { fields: state.fields, choices: state.choices }, state.geoJSON, { city, days });
+  const agg = computeAggregates(state.data, state.schema || { fields: state.fields, choices: state.choices }, state.geoJSON, { city, days });
   json(res, 200, {
     ...agg,
     version: state.version
@@ -249,6 +251,9 @@ function handleSubmissions(req, res) {
     submitted_at: '_submission_time'
   };
   const sortKey = SORT_KEYS[rawSortKey] || rawSortKey;
+  if (sortKey === '__service_count') {
+    rows = rows.map((r) => ({ ...r, __service_count: countRecordServices(r, state.serviceEntities, state.choices) }));
+  }
   rows.sort((a, b) => {
     let av = a[sortKey] ?? '';
     let bv = b[sortKey] ?? '';
@@ -358,7 +363,7 @@ async function handleRequest(req, res) {
   if (pathname === '/api/aggregate') {
     const city = url.searchParams.get('city') || undefined;
     const days = url.searchParams.get('days') || undefined;
-    const agg = computeAggregates(state.data, { fields: state.fields, choices: state.choices }, state.geoJSON, { city, days });
+    const agg = computeAggregates(state.data, state.schema || { fields: state.fields, choices: state.choices }, state.geoJSON, { city, days });
     return json(res, 200, { ...agg, version: state.version });
   }
 
@@ -394,6 +399,9 @@ async function handleRequest(req, res) {
       submitted_at: '_submission_time'
     };
     const sortKey = SORT_KEYS[rawSortKey] || rawSortKey;
+    if (sortKey === '__service_count') {
+      rows = rows.map((r) => ({ ...r, __service_count: countRecordServices(r, state.serviceEntities, state.choices) }));
+    }
     rows.sort((a, b) => {
       let av = a[sortKey] ?? '';
       let bv = b[sortKey] ?? '';
@@ -480,11 +488,12 @@ async function handleRequest(req, res) {
 async function init() {
   try {
     const schema = await koboFetchSchema();
-    state.schema = schema;
     state.fields = schema.fields || [];
     state.choices = schema.choices || {};
+    state.serviceEntities = buildServiceEntities({ ...schema, fields: state.fields, choices: state.choices });
+    state.schema = { ...schema, serviceEntities: state.serviceEntities };
     if (schema.title) {
-      console.log(`[schema] ${schema.title} · ${state.fields.length} campos`);
+      console.log(`[schema] ${schema.title} · ${state.fields.length} campos · ${state.serviceEntities.length} órgãos`);
     }
   } catch (err) {
     console.error('[schema] falha:', err.message);
