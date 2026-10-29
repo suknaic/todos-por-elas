@@ -18,8 +18,7 @@ automaticamente. Não versione o arquivo `.env`.
 Com as duas variáveis configuradas, a página, as APIs, o stream em tempo real,
 os arquivos protegidos e as exportações exigem usuário e senha. A autenticação
 Basic Auth continua aceita para integrações e clientes que já a utilizam. Sem
-essa configuração, o servidor responde com erro de autenticação em vez de
-deixar os dados públicos.
+essa configuração, o acesso fica liberado sem login.
 
 ## Execução local
 
