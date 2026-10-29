@@ -135,7 +135,7 @@ async function handleRequest(req, res) {
   }
 
   if (pathname === '/api/submissions') {
-    const page = Math.max(1, Number(url.searchParams.get('page') || 1));
+    const requestedPage = Math.max(1, Number(url.searchParams.get('page') || 1));
     const size = Math.min(100, Math.max(1, Number(url.searchParams.get('size') || 15)));
     const city = url.searchParams.get('city') || undefined;
     const q = url.searchParams.get('q') || undefined;
@@ -179,9 +179,10 @@ async function handleRequest(req, res) {
       else if (av > bv) cmp = 1;
       return sortDir === 'asc' ? cmp : -cmp;
     });
+    const pages = Math.max(1, Math.ceil(rows.length / size));
+    const page = Math.min(requestedPage, pages);
     const start = (page - 1) * size;
     const slice = rows.slice(start, start + size);
-    const pages = Math.max(1, Math.ceil(rows.length / size));
     return json(res, 200, {
       rows: slice.map((r) => ({
         ...r,
