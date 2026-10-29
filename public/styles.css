@@ -1003,7 +1003,7 @@ tbody tr:hover {
   border: 1px solid var(--border);
   border-top: 4px solid var(--brand);
   border-radius: var(--radius-lg);
-  padding: var(--espaco-6) var(--espaco-6) 28px;
+  padding: 28px;
   box-shadow: var(--shadow-sm);
   margin-bottom: 26px;
 }
@@ -1944,7 +1944,7 @@ tbody tr:hover {
   }
 
   .filtros {
-    padding: 1.25rem;
+    padding: 28px;
   }
 
   .mapa-box {

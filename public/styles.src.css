@@ -231,7 +231,7 @@
   .filtros {
     background: var(--grad-surface); border: 1px solid var(--border);
     border-top: 4px solid var(--brand); border-radius: var(--radius-lg);
-    padding: var(--espaco-6) var(--espaco-6) 28px; box-shadow: var(--shadow-sm);
+    padding: 28px; box-shadow: var(--shadow-sm);
     margin-bottom: 26px;
   }
   [data-theme='dark'] .filtros { background: var(--surface-2); }
@@ -445,7 +445,7 @@
   main { padding-left: 18px; padding-right: 18px; }
   .error-banner { margin-left: 16px; margin-right: 16px; }
   #searchInput { min-width: 100%; }
-  .filtros { padding: 1.25rem; }
+  .filtros { padding: 28px; }
   .mapa-box { height: 300px; }
 
   .menu-toggle {
