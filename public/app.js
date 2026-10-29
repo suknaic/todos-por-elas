@@ -42,6 +42,7 @@ const app = {
   fields: [],
   choices: {},
   serviceEntities: [],
+  tableCols: null,
   records: [],
   charts: new Map(),
   map: null,
@@ -689,7 +690,7 @@ function serviceEntityPills(r) {
   ).join(' ');
 }
 
-const TABLE_COLS = [
+const TABLE_COLS_BASE = [
   { key: 'nome', label: 'Nome', get: (r) => r.Nome_do_usu_rio, html: (r) => esc(r.Nome_do_usu_rio) || '<span class="masked">sem nome</span>' },
   { key: 'idade', label: 'Idade', get: (r) => r.Idade, html: (r) => esc(r.Idade) },
   { key: 'cidade', label: 'Cidade', get: (r) => cellChoice(r, 'wb2gy08'), html: (r) => esc(cellChoice(r, 'wb2gy08')) },
@@ -702,6 +703,75 @@ const TABLE_COLS = [
   { key: 'envio', label: 'Envio', get: (r) => r.__envio, html: (r) => esc(fmtDate(r.__envio)) }
 ];
 
+const TABLE_BASE_FIELD_TOKENS = new Set([
+  'nomedousuario',
+  'idade',
+  'cidadedaresidenciaatual',
+  'zona',
+  'identidadedegenero',
+  'trabalha',
+  'rendafamiliarpercapita',
+  'cpf'
+]);
+
+function isSensitiveField(field) {
+  const token = normKey(field?.label || field?.name || field?.xpath || '');
+  return token.includes('cpf') || token === 'rg' || token.endsWith('rg');
+}
+
+function fieldTokenSet(field) {
+  return new Set([
+    normKey(field?.label || ''),
+    normKey(field?.name || ''),
+    normKey(field?.xpath || '')
+  ].filter(Boolean));
+}
+
+function isAlreadyInBaseCols(field) {
+  if (!field) return true;
+  const type = String(field.type || '');
+  if (type.startsWith('begin_') || type.startsWith('end_') || type === 'note') return true;
+  const tokens = fieldTokenSet(field);
+  if (field.list && ['wb2gy08', 'ml1hg11', 'xv1wh54', 'li3gq59', 'bi8dg53'].includes(field.list)) return true;
+  for (const token of tokens) {
+    if (TABLE_BASE_FIELD_TOKENS.has(token)) return true;
+  }
+  return false;
+}
+
+function valueToCell(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join(', ');
+  if (value == null) return '';
+  return String(value).trim();
+}
+
+function buildTableCols() {
+  const cols = [...TABLE_COLS_BASE];
+  const usedKeys = new Set(cols.map((c) => c.key));
+  for (const f of app.fields || []) {
+    if (!f || !(f.xpath || f.name) || isAlreadyInBaseCols(f)) continue;
+    const key = `f:${f.xpath || f.name}`;
+    if (usedKeys.has(key)) continue;
+    const label = f.label || f.name || f.xpath;
+    cols.push({
+      key,
+      label,
+      get: (r) => valueToCell(getValue(r, f)),
+      html: (r) => {
+        const value = valueToCell(getValue(r, f));
+        if (!value) return '';
+        if (isSensitiveField(f) && !app.reveal) return '<span class="masked">••••••••</span>';
+        return esc(value);
+      }
+    });
+    usedKeys.add(key);
+  }
+  app.tableCols = cols;
+  if (!app.tableCols.some((c) => c.key === app.sort.key)) {
+    app.sort = { key: 'submitted_at', dir: 'desc' };
+  }
+}
+
 function esc(v) {
   if (v == null) return '';
   return String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -712,15 +782,16 @@ function renderTableState({ rows, total, page, pages, size }) {
   $('emptyState').hidden = has;
   $('tableCard').hidden = !has;
   if (!has) return;
+  const cols = app.tableCols?.length ? app.tableCols : TABLE_COLS_BASE;
 
   const thead = $('dataTable').querySelector('thead');
   const tbody = $('dataTable').querySelector('tbody');
-  thead.innerHTML = `<tr>${TABLE_COLS.map((c) =>
+  thead.innerHTML = `<tr>${cols.map((c) =>
     `<th data-key="${c.key}" class="${app.sort.key === c.key ? 'sorted' : ''}">${c.label}${app.sort.key === c.key ? (app.sort.dir === 'asc' ? ' ↑' : ' ↓') : ''}</th>`
   ).join('')}</tr>`;
 
   tbody.innerHTML = rows.map((r) =>
-    `<tr>${TABLE_COLS.map((c) => `<td>${c.html(r)}</td>`).join('')}</tr>`
+    `<tr>${cols.map((c) => `<td>${c.html(r)}</td>`).join('')}</tr>`
   ).join('');
 
   thead.querySelectorAll('th').forEach((th) => {
@@ -1034,6 +1105,7 @@ async function loadSchema() {
     app.fields = json.schema?.fields || [];
     app.choices = json.schema?.choices || {};
     app.serviceEntities = json.schema?.serviceEntities || [];
+    buildTableCols();
     if (app.schema?.title) {
       $('projectTitle').textContent = app.schema.title;
       document.title = `${app.schema.title} — Dashboard`;
