@@ -10,15 +10,7 @@ import {
 import { computeAggregates, cityName, getValue, countRecordServices } from '../lib/aggregate.js';
 import { buildServiceEntities } from '../lib/services.js';
 import { resolveField } from '../lib/normalize.js';
-import {
-  authChallenge,
-  authenticateRequest,
-  isLoginRequest,
-  isPublicPath,
-  loginRequest,
-  logoutRequest,
-  securityHeaders
-} from '../lib/auth.js';
+import { securityHeaders } from '../lib/security.js';
 
 const __dirname = path.dirname(path.resolve());
 
@@ -67,24 +59,8 @@ async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const { pathname } = url;
 
-  if (isLoginRequest(req)) return loginRequest(req, res);
-  if (req.method === 'POST' && pathname === '/api/logout') {
-    const auth = await authenticateRequest(req);
-    if (!auth.ok) return authChallenge(res, 401, 'Não autorizado');
-    return logoutRequest(req, res);
-  }
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return json(res, 405, { error: 'Método não permitido' });
-  }
-
-  const protectedPath = pathname !== '/health' && !isPublicPath(pathname);
-  if (protectedPath) {
-    const auth = await authenticateRequest(req);
-    if (!auth.ok) {
-      if (pathname.startsWith('/api/')) return authChallenge(res, auth.status, auth.message);
-      res.writeHead(302, { ...securityHeaders(), Location: `/login?next=${encodeURIComponent(pathname)}` });
-      return res.end();
-    }
   }
 
   if (pathname === '/api/data') {

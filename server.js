@@ -12,15 +12,7 @@ import {
 import { computeAggregates, cityName, getValue, countRecordServices } from './lib/aggregate.js';
 import { buildServiceEntities } from './lib/services.js';
 import { resolveField } from './lib/normalize.js';
-import {
-  authChallenge,
-  authenticateRequest,
-  isLoginRequest,
-  isPublicPath,
-  loginRequest,
-  logoutRequest,
-  securityHeaders
-} from './lib/auth.js';
+import { securityHeaders } from './lib/security.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -300,24 +292,8 @@ async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const { pathname } = url;
 
-  if (isLoginRequest(req)) return loginRequest(req, res);
-  if (req.method === 'POST' && pathname === '/api/logout') {
-    const auth = await authenticateRequest(req);
-    if (!auth.ok) return authChallenge(res, 401, 'Não autorizado');
-    return logoutRequest(req, res);
-  }
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return json(res, 405, { error: 'Método não permitido' });
-  }
-
-  const protectedPath = pathname !== '/health' && !isPublicPath(pathname);
-  if (protectedPath) {
-    const auth = await authenticateRequest(req);
-    if (!auth.ok) {
-      if (pathname.startsWith('/api/')) return authChallenge(res, auth.status, auth.message);
-      res.writeHead(302, { ...securityHeaders(), Location: `/login?next=${encodeURIComponent(pathname)}` });
-      return res.end();
-    }
   }
 
   if (pathname === '/api/data') {
@@ -473,7 +449,7 @@ async function handleRequest(req, res) {
     return json(res, 200, { ok: true, clients: state.clients.size, count: state.count });
   }
 
-  const rel = pathname === '/login' ? 'login.html' : pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
   const filePath = path.join(PUBLIC_DIR, rel);
   if (!filePath.startsWith(PUBLIC_DIR)) return json(res, 403, { error: 'Proibido' });
   try {
@@ -507,7 +483,6 @@ async function init() {
   server.listen(CONFIG.port, () => {
     console.log(`Dashboard em http://localhost:${CONFIG.port}`);
     console.log(`Projeto: ${CONFIG.assetUid} | Poll: ${CONFIG.pollIntervalMs / 1000}s | Registros: ${state.count}`);
-    if (process.env.DASHBOARD_USER && process.env.DASHBOARD_PASS) console.log('[auth] Basic auth ativo');
   });
 
   pollOnce({ silent: true }).catch(() => {});

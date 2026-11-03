@@ -13,20 +13,10 @@ const SCALE_DARK = ['#3a2d5c', '#4a3d70', '#8560c0', '#c3b0e2'];
 
 const $ = (id) => document.getElementById(id);
 
-function redirectToLogin() {
-  if (window.location.pathname !== '/login') {
-    window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
-  }
-}
-
 async function fetchJson(input, options) {
   const headers = new Headers(options?.headers || {});
   const response = await fetch(input, { ...options, headers });
   const text = await response.text();
-  if (response.status === 401 || response.status === 403) {
-    redirectToLogin();
-    throw new Error('Sessão expirada');
-  }
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}${text ? `: ${text.slice(0, 160)}` : ''}`);
   }
@@ -874,10 +864,6 @@ async function connectStream() {
       const response = await fetch(API_STREAM, {
         cache: 'no-store'
       });
-      if (response.status === 401 || response.status === 403) {
-        redirectToLogin();
-        return;
-      }
       if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
       retry = 1000;
       setLive('online', 'Tempo real');
