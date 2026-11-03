@@ -41,7 +41,6 @@ const app = {
   search: '',
   reveal: false,
   cidadeFiltro: null,
-  periodoFiltro: 'todos',
   lastVersion: -1
 };
 
@@ -205,7 +204,7 @@ function mountChart(id, options) {
   app.charts.set(id, chart);
 }
 
-function barChart(id, map, { horizontal = false, max = 12, ordered = false, labelFormat = null } = {}) {
+function barChart(id, map, { horizontal = false, max = 12, ordered = false, labelFormat = null, seriesName = 'Cadastros', valueFormatter = null, yMax = null } = {}) {
   const isArray = Array.isArray(map);
   let entries = isArray ? map.map((d) => (Array.isArray(d) ? [d[0], d[1]] : [d, 0])) : sortedEntries(map);
   if (entries.length > max) entries = entries.slice(0, max);
@@ -218,7 +217,7 @@ function barChart(id, map, { horizontal = false, max = 12, ordered = false, labe
   mountChart(id, {
     ...chartBase(),
     chart: { type: 'bar' },
-    series: [{ name: 'Cadastros', data: values }],
+    series: [{ name: seriesName, data: values }],
     labels,
     colors,
     plotOptions: {
@@ -240,7 +239,8 @@ function barChart(id, map, { horizontal = false, max = 12, ordered = false, labe
     yaxis: {
       labels: { ...axisLabel, maxWidth: horizontal ? 240 : undefined },
       min: 0,
-      forceNiceScale: true
+      max: yMax ?? undefined,
+      forceNiceScale: yMax == null
     },
     grid: {
       ...chartBase().grid,
@@ -250,7 +250,7 @@ function barChart(id, map, { horizontal = false, max = 12, ordered = false, labe
     legend: { show: false },
     tooltip: {
       ...chartBase().tooltip,
-      y: { formatter: (v) => `${v} cadastro${v === 1 ? '' : 's'}` }
+      y: { formatter: valueFormatter || ((v) => `${v} cadastro${v === 1 ? '' : 's'}`) }
     }
   });
 }
@@ -505,7 +505,16 @@ function renderCharts(agg) {
   histogramChart('chartHistServicos', sv.histograma || []);
 
   // Qualidade
-  barChart('chartRespostaCampo', q.respostaPorCampo.map((r) => [r.campo, r.n]), { horizontal: true, max: 10 });
+  const respostaPorCampo = q.respostaPorCampo || [];
+  const respostaHost = $('chartRespostaCampo')?.parentElement;
+  if (respostaHost) respostaHost.style.height = `${Math.max(350, respostaPorCampo.length * 24 + 48)}px`;
+  barChart('chartRespostaCampo', respostaPorCampo.map((r) => [r.campo, r.pct]), {
+    horizontal: true,
+    max: respostaPorCampo.length || 1,
+    seriesName: 'Completude',
+    valueFormatter: (v) => `${v}% preenchido`,
+    yMax: 100
+  });
   doughnutChart('chartCompletude', q.completudeDist || {});
 }
 
@@ -734,7 +743,6 @@ async function loadSubmissions() {
   url.searchParams.set('size', PAGE_SIZE);
   if (app.cidadeFiltro) url.searchParams.set('city', app.cidadeFiltro);
   if (app.search) url.searchParams.set('q', app.search);
-  if (app.periodoFiltro !== 'todos') url.searchParams.set('days', app.periodoFiltro);
   url.searchParams.set('sort', app.sort.key);
   url.searchParams.set('dir', app.sort.dir);
   try {
@@ -749,7 +757,6 @@ async function loadSubmissions() {
 async function loadAggregate() {
   const url = new URL(API_AGGREGATE, window.location.origin);
   if (app.cidadeFiltro) url.searchParams.set('city', app.cidadeFiltro);
-  if (app.periodoFiltro !== 'todos') url.searchParams.set('days', app.periodoFiltro);
   try {
     const json = await fetchJson(url, { cache: 'no-store' });
     window.aggCobertura = json.cobertura || [];
@@ -763,7 +770,7 @@ async function loadAggregate() {
       const evt = new CustomEvent('mapa:dados', { detail: { cobertura: json.cobertura || [], n: json.n || 0, cidade: app.cidadeFiltro } });
       window.dispatchEvent(evt);
     }
-    updateChips();
+    updateFiltroCobertura();
     showError(null);
   } catch (err) {
     showError(`Falha ao carregar agregados: ${err.message}`);
@@ -798,35 +805,14 @@ async function initMapa() {
 
 function setCidadeFiltro(nome) {
   app.cidadeFiltro = nome;
-  const sel = $('filtroMunicipio');
-  if (sel) sel.value = nome || '';
-  updateChips();
+  updateFiltroCobertura();
   loadAggregate();
   loadSubmissions();
 }
 
-function updateChips() {
-  const chips = $('chips');
-  const btnClear = $('btnLimparFiltros');
-  const tem = app.cidadeFiltro || (app.periodoFiltro !== 'todos');
-  chips.innerHTML = '';
-  if (btnClear) btnClear.hidden = !tem;
+function updateFiltroCobertura() {
   const btnCob = $('btnLimparCobertura');
   if (btnCob) btnCob.hidden = !app.cidadeFiltro;
-  if (app.cidadeFiltro) {
-    const chip = document.createElement('div');
-    chip.className = 'chip';
-    chip.innerHTML = `<span>Município: ${esc(app.cidadeFiltro)}</span><button class="chip-remover" data-tipo="cidade">×</button>`;
-    chip.querySelector('button').addEventListener('click', () => setCidadeFiltro(null));
-    chips.appendChild(chip);
-  }
-  if (app.periodoFiltro !== 'todos') {
-    const chip = document.createElement('div');
-    chip.className = 'chip';
-    chip.innerHTML = `<span>Período: últimos ${app.periodoFiltro} dias</span><button class="chip-remover" data-tipo="periodo">×</button>`;
-    chip.querySelector('button').addEventListener('click', () => { app.periodoFiltro = 'todos'; $('filtroPeriodo').value = 'todos'; updateChips(); loadAggregate(); loadSubmissions(); });
-    chips.appendChild(chip);
-  }
 }
 
 // ---------- Tema ----------
@@ -932,28 +918,6 @@ function bind() {
 
   [$('btnVisibilidade'), $('mobileBtnVisibilidade')].filter(Boolean).forEach(btn => btn.addEventListener('click', () => { /* handled in initSecoes */ }));
 
-  $('filtroPeriodo').addEventListener('change', (e) => {
-    app.periodoFiltro = e.target.value;
-    app.page = 1;
-    updateChips();
-    loadAggregate();
-    loadSubmissions();
-  });
-
-  $('filtroMunicipio').addEventListener('change', (e) => {
-    setCidadeFiltro(e.target.value || null);
-  });
-
-  $('btnLimparFiltros').addEventListener('click', () => {
-    app.cidadeFiltro = null;
-    app.periodoFiltro = 'todos';
-    $('filtroMunicipio').value = '';
-    $('filtroPeriodo').value = 'todos';
-    updateChips();
-    loadAggregate();
-    loadSubmissions();
-  });
-
   $('btnLimparCobertura').addEventListener('click', () => setCidadeFiltro(null));
 
   $('tbodyMunicipio').addEventListener('click', (e) => {
@@ -1033,18 +997,6 @@ async function loadSchema() {
       $('footerForm').href = app.schema.formUrl;
       $('footerForm').hidden = false;
     }
-    // preencher select de municípios
-    const sel = $('filtroMunicipio');
-    const fCidade = field('Cidade da residência atual');
-    const cidades = new Set();
-    for (const rec of app.records) {
-      const v = getValue(rec, fCidade);
-      if (v) cidades.add(v);
-    }
-    // opções do formulário (mesmo que ainda não haja registros)
-    const listaCidades = (app.choices.wb2gy08 || []).map((c) => c.label || c.name);
-    for (const c of listaCidades) cidades.add(c);
-    sel.innerHTML = '<option value="">Todos os municípios</option>' + [...cidades].sort((a, b) => a.localeCompare(b, 'pt-BR')).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
   } catch (err) {
     showError(`Falha ao carregar o schema do formulário: ${err.message}`);
   }

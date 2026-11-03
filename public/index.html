@@ -89,30 +89,6 @@
   </div>
 
   <main>
-    <!-- Filtros globais -->
-    <section class="filtros" id="filtros">
-      <h2 class="filtro-titulo">Filtros </h2>
-      <div class="filtro-linha">
-        <div class="filtro-item">
-          <label>Período</label>
-          <select id="filtroPeriodo">
-            <option value="todos">Todos</option>
-            <option value="7">Últimos 7 dias</option>
-            <option value="30">Últimos 30 dias</option>
-            <option value="90">Últimos 90 dias</option>
-          </select>
-        </div>
-        <div class="filtro-item">
-          <label>Município</label>
-          <select id="filtroMunicipio">
-            <option value="">Todos os municípios</option>
-          </select>
-        </div>
-        <button class="btn btn-sm" id="btnLimparFiltros">Limpar filtros</button>
-      </div>
-      <div class="chips" id="chips"></div>
-    </section>
-
     <!-- Painel 1 — KPIs -->
     <section class="section" id="sec-visao-geral">
       <h2 class="section-title">Painel 1 — Visão geral</h2>
@@ -519,11 +495,13 @@
       </div>
       <div class="grid">
         <article class="card card-wide">
+          <h3>Preenchimento por campo</h3>
           <div class="chart-box tall">
             <div class="chart" id="chartRespostaCampo"></div>
           </div>
         </article>
         <article class="card">
+          <h3>Distribuição da completude</h3>
           <div class="chart-box">
             <div class="chart" id="chartCompletude"></div>
           </div>
