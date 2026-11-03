@@ -204,7 +204,7 @@ function mountChart(id, options) {
   app.charts.set(id, chart);
 }
 
-function barChart(id, map, { horizontal = false, max = 12, ordered = false, labelFormat = null, seriesName = 'Cadastros', valueFormatter = null, yMax = null } = {}) {
+function barChart(id, map, { horizontal = false, max = 12, ordered = false, labelFormat = null } = {}) {
   const isArray = Array.isArray(map);
   let entries = isArray ? map.map((d) => (Array.isArray(d) ? [d[0], d[1]] : [d, 0])) : sortedEntries(map);
   if (entries.length > max) entries = entries.slice(0, max);
@@ -217,7 +217,7 @@ function barChart(id, map, { horizontal = false, max = 12, ordered = false, labe
   mountChart(id, {
     ...chartBase(),
     chart: { type: 'bar' },
-    series: [{ name: seriesName, data: values }],
+    series: [{ name: 'Cadastros', data: values }],
     labels,
     colors,
     plotOptions: {
@@ -239,8 +239,7 @@ function barChart(id, map, { horizontal = false, max = 12, ordered = false, labe
     yaxis: {
       labels: { ...axisLabel, maxWidth: horizontal ? 240 : undefined },
       min: 0,
-      max: yMax ?? undefined,
-      forceNiceScale: yMax == null
+      forceNiceScale: true
     },
     grid: {
       ...chartBase().grid,
@@ -250,7 +249,7 @@ function barChart(id, map, { horizontal = false, max = 12, ordered = false, labe
     legend: { show: false },
     tooltip: {
       ...chartBase().tooltip,
-      y: { formatter: valueFormatter || ((v) => `${v} cadastro${v === 1 ? '' : 's'}`) }
+      y: { formatter: (v) => `${v} cadastro${v === 1 ? '' : 's'}` }
     }
   });
 }
@@ -457,7 +456,6 @@ function renderCharts(agg) {
   const sv = agg.servicos;
   const v = agg.vulnerabilidade || {};
   const dm = agg.demanda || {};
-  const q = agg.qualidade;
 
   // Painel 2 — perfil social e familiar
   histogramChart('chartIdade', ageBucketsMap(d.idade.buckets.reduce((m, [k, val]) => { m.set(k, val); return m; }, new Map())));
@@ -503,19 +501,6 @@ function renderCharts(agg) {
   stackedChart('chartCrasXentidades', v.acompanhamentoXentidades, { horizontal: true, maxSeries: 12 });
   stackedChart('chartRacaXentidades', v.racaXentidades, { maxSeries: 12 });
   histogramChart('chartHistServicos', sv.histograma || []);
-
-  // Qualidade
-  const respostaPorCampo = q.respostaPorCampo || [];
-  const respostaHost = $('chartRespostaCampo')?.parentElement;
-  if (respostaHost) respostaHost.style.height = `${Math.max(350, respostaPorCampo.length * 24 + 48)}px`;
-  barChart('chartRespostaCampo', respostaPorCampo.map((r) => [r.campo, r.pct]), {
-    horizontal: true,
-    max: respostaPorCampo.length || 1,
-    seriesName: 'Completude',
-    valueFormatter: (v) => `${v}% preenchido`,
-    yMax: 100
-  });
-  doughnutChart('chartCompletude', q.completudeDist || {});
 }
 
 // ---------- Evolução ----------
@@ -1018,13 +1003,13 @@ function initScrollProgress() {
 
 // ---------- Visibilidade de seções (modal) ----------
 const SECOES_PADRAO = [
+  'sec-qualidade',
   'sec-visao-geral',
   'sec-evolucao',
   'sec-cobertura',
   'sec-perfil-social',
   'sec-vulnerabilidade',
   'sec-demanda-servicos',
-  'sec-qualidade',
   'sec-cadastros-recentes'
 ];
 

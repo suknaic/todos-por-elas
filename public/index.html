@@ -89,6 +89,39 @@
   </div>
 
   <main>
+    <!-- Qualidade da coleta -->
+    <section class="section" id="sec-qualidade">
+      <h2 class="section-title">Qualidade da coleta</h2>
+      <div class="kpis" style="margin-bottom:16px">
+        <article class="kpi kpi-roxo">
+          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="8" y="2" width="8" height="4" rx="1" />
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <path d="m9 14 2 2 4-4" />
+            </svg></div>
+          <div class="kpi-dados">
+            <span class="kpi-label">Completude média</span>
+            <strong class="kpi-valor" id="kpiCompletude">0</strong>
+            <span class="kpi-sub" id="kpiCompletudeSub">% dos campos preenchidos por cadastro</span>
+          </div>
+        </article>
+        <article class="kpi kpi-rosa">
+          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg></div>
+          <div class="kpi-dados">
+            <span class="kpi-label">Possíveis duplicidades</span>
+            <strong class="kpi-valor" id="kpiDup">0</strong>
+            <span class="kpi-sub" id="kpiDupSub">CPF ou RG repetidos</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <!-- Painel 1 — KPIs -->
     <section class="section" id="sec-visao-geral">
       <h2 class="section-title">Painel 1 — Visão geral</h2>
@@ -457,53 +490,6 @@
           <h3>Serviços por pessoa</h3>
           <div class="chart-box">
             <div class="chart" id="chartHistServicos"></div>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <!-- Qualidade da coleta -->
-    <section class="section" id="sec-qualidade">
-      <h2 class="section-title">Qualidade da coleta</h2>
-      <div class="kpis" style="margin-bottom:16px">
-        <article class="kpi kpi-roxo">
-          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="8" y="2" width="8" height="4" rx="1" />
-              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-              <path d="m9 14 2 2 4-4" />
-            </svg></div>
-          <div class="kpi-dados">
-            <span class="kpi-label">Completude média</span>
-            <strong class="kpi-valor" id="kpiCompletude">0</strong>
-            <span class="kpi-sub" id="kpiCompletudeSub">% dos campos preenchidos por cadastro</span>
-          </div>
-        </article>
-        <article class="kpi kpi-rosa">
-          <div class="kpi-icone"><svg class="kpi-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg></div>
-          <div class="kpi-dados">
-            <span class="kpi-label">Possíveis duplicidades</span>
-            <strong class="kpi-valor" id="kpiDup">0</strong>
-            <span class="kpi-sub" id="kpiDupSub">CPF ou RG repetidos</span>
-          </div>
-        </article>
-      </div>
-      <div class="grid">
-        <article class="card card-wide">
-          <h3>Preenchimento por campo</h3>
-          <div class="chart-box tall">
-            <div class="chart" id="chartRespostaCampo"></div>
-          </div>
-        </article>
-        <article class="card">
-          <h3>Distribuição da completude</h3>
-          <div class="chart-box">
-            <div class="chart" id="chartCompletude"></div>
           </div>
         </article>
       </div>
